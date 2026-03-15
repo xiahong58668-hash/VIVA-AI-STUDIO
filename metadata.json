@@ -1,0 +1,5 @@
+{
+  "name": "VIVA AI短视频助手",
+  "description": "使用Gemini 3 pro, Nano Banana 和Sora2 生成专业电影剧本、分镜脚本和视频。打造从创意到视频的完整工作流。",
+  "requestFramePermissions": []
+}

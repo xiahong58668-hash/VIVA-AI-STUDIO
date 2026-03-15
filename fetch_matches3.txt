@@ -1,0 +1,1 @@
+lyfill the global, `globalThis.fetch = fetch`")}function T
