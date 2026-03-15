@@ -240,7 +240,7 @@ function App() {
   const [textModel, setTextModel] = useState<string>('gemini-3.1-flash-lite-preview');
   const [assetModel, setAssetModel] = useState<string>('gemini-3.1-flash-image-preview');
   const [videoModel, setVideoModel] = useState<VideoModel>('veo_3_1-fast');
-  const [audioModel, setAudioModel] = useState<string>('gemini-2.5-flash-preview-tts');
+  const [audioModel, setAudioModel] = useState<string>('gemini-2.5-pro-preview-tts');
   
   // Sync videoDuration with videoModel
   useEffect(() => {
@@ -1378,7 +1378,7 @@ function App() {
                         <div className="relative">
                             <select value={audioModel} onChange={(e) => setAudioModel(e.target.value)} className="w-full bg-gray-50 border-2 border-black p-4 font-bold text-lg rounded-xl appearance-none cursor-pointer hover:bg-gray-100 focus:outline-none focus:ring-4 focus:ring-[#10B981]">
                                 <option value="gemini-2.5-flash-preview-tts">Gemini-2.5-Flash-TTS</option>
-                                <option value="gemini-2.5-pro-preview-tts">gemini-2.5-pro--tts</option>
+                                <option value="gemini-2.5-pro-preview-tts">gemini-2.5-pro-tts</option>
                             </select>
                             <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
                                 <ChevronRight className="rotate-90" size={24} strokeWidth={3} />

@@ -488,13 +488,14 @@ export const generateScriptByScenes = async (topic: string, stylePrompt: string,
 1. **剧本提取**：以剧本分镜中的「人物」「台词」「情绪氛围」为核心，锁定每句台词的演绎基调。
 2. **情感细化**：结合剧情上下文，明确每句台词的具体情感（如紧张、窃喜、愤怒、疲惫）及情绪变化（如从平静到激动）。
 3. **语速与节奏控制**：根据台词内容、人物性格及剧情张力，设定语速（快/中/慢）、停顿位置、重音强调等细节。
-4. **纯净人声**：音频只会生成人物说话声音，不会生成什么“轻快且略带搞笑的背景音乐高潮、伴随着清脆的键盘敲击声和成功提交的系统提示音、急促的时钟滴答声、快递员发出夸张的憋气声音“等之类的音效。
-5. **台词字数控制**：角色的台词数量必须严格考虑剧本的单视频时长（${duration}秒）。正常语速约为每秒4-5个字，请确保生成的台词字数在合理范围内，避免台词过长导致音频超出视频时长。
+4. **风格与语气**：参考剧本内容加入合适的控制风格、语气、口音、节奏、语速等词。
+5. **纯净人声**：音频只会生成人物说话声音，不会生成什么“轻快且略带搞笑的背景音乐高潮、伴随着清脆的键盘敲击声和成功提交的系统提示音、急促的时钟滴答声、快递员发出夸张的憋气声音“等之类的音效。
+6. **台词字数控制**：角色的台词数量必须严格考虑剧本的单视频时长（${duration}秒）。正常语速约为每秒4-5个字，请确保生成的台词字数在合理范围内，避免台词过长导致音频超出视频时长。
 
 ### 示例参考
-音频提示词的内容必须严格区分角色，格式为“[角色名]：(情绪/语气)台词内容”。
-1. 单人发言：[小明]：(自信且略带神经质)社交牛逼症插件，安装中...。
-2. 多位发言：[小明]：(疲惫)那么……今天有什么安排？[旁白]：(低沉)他并不知道，危险正在靠近。[小红]：(兴奋)你绝对猜不到，我会给你一个惊喜！
+音频提示词的内容必须严格区分角色，格式为“[角色名]：(风格/语气/口音/节奏/语速)台词内容”。
+1. 单人发言：[小明]：(带着酒后的冲动与意识模糊，慢吞吞地语速)老板那发型，其实我也觉得像……像那个还没熟透的柚子。
+2. 多位发言：[小明]：(疲惫且沙哑)那么……今天有什么安排？[旁白]：(低沉且富有磁性，语速平缓)他并不知道，危险正在靠近。[小红]：(兴奋且尖锐，语速极快)你绝对猜不到，我会给你一个惊喜！
 3. 旁白也算一个角色，请务必标注为“[旁白]”。
 
 ## 五、全局统一参数预设生成
@@ -601,7 +602,7 @@ export const generateScript = async (finalScriptText: string, styleModifier: str
     - 'globalParams' = 全局统一参数预设 (The section before [视频 1])
     - CRITICAL: If '音频提示词' (Audio Prompt) contains dialogue between multiple characters (e.g., "角色1: ... 角色2: ...") or a narrator and a character, you MUST split them into separate entries in the 'audios' array.
     - Each entry in 'audios' must have a 'name' and a 'prompt'.
-    - 'prompt' should include the emotion and the actual dialogue for THAT character.
+    - 'prompt' should include the style, tone, accent, rhythm, speed, emotion and the actual dialogue for THAT character, formatted as "(Description) Dialogue".
     - Narrator (旁白) counts as a character.
     - If fields are missing, infer them from context.
     
