@@ -381,11 +381,13 @@ export const extractAssetsFromScript = async (script: string): Promise<{ charact
         result = JSON.parse(cleanJson(response.text || "{}"));
     }
 
-    const sanitize = (list: any[]) => (Array.isArray(list) ? list : []).map(item => {
-        const name = item.name || (typeof item === 'string' ? item : "Unknown");
-        const description = item.description || "";
-        return { name, description };
-    });
+    const sanitize = (list: any[]) => (Array.isArray(list) ? list : [])
+        .map(item => {
+            const name = item.name || (typeof item === 'string' ? item : "Unknown");
+            const description = item.description || "";
+            return { name, description };
+        })
+        .filter(item => item.name !== '旁白');
 
     return { 
         characters: sanitize(result.characters || []), 
