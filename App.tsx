@@ -671,7 +671,9 @@ function App() {
           
           if (loadingSession.current !== sessionId) return;
 
-          const newCharacters = extraction.characters.map((item, i) => ({ id: `c-ext-${i}`, type: 'character' as const, name: item.name, description: item.description, data: '', mimeType: '', previewUrl: '', autoReference: true }));
+          const newCharacters = extraction.characters
+              .filter(item => item.name !== '旁白')
+              .map((item, i) => ({ id: `c-ext-${i}`, type: 'character' as const, name: item.name, description: item.description, data: '', mimeType: '', previewUrl: '', autoReference: true }));
           const newCoreScenes = extraction.scenes.map((item, i) => ({ id: `s-ext-${i}`, type: 'scene' as const, name: item.name, description: item.description, data: '', mimeType: '', previewUrl: '', autoReference: true }));
 
           setCharacters(newCharacters);
