@@ -39,6 +39,7 @@ export interface Scene {
   audioVoice?: string; // Deprecated: Use audios
   audios?: AudioItem[]; // Array of audio items (e.g., 2 per scene)
   videoPromptZh?: string; // Chinese video prompt
+  character?: string; // Character name(s) in this scene
   videoDuration?: 8 | 10 | 15; // User preference for video length
   isGeneratingImage?: boolean;
   isGeneratingVideo?: boolean;

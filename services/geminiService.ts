@@ -358,13 +358,27 @@ export const analyzeImageForPrompt = async (imageBytes: string): Promise<string>
 export const extractAssetsFromScript = async (script: string): Promise<{ characters: {name: string, description: string}[], scenes: {name: string, description: string}[] }> => {
   return retryOperation(async () => {
     const prompt = `Analyze the script and extract specific character names and core location names.
+    
+    CRITICAL RULES for Characters:
+    - For each character, carefully analyze the script context to infer their GENDER, age, and personality.
+    - Pay close attention to relationship terms (e.g., "闺蜜" usually implies the protagonist is female, "兄弟" might imply male).
+    - If the name is "我" or "主角", look for dialogue or descriptions that reveal their identity.
+    - Provide a detailed Visual Description (Simplified Chinese) including gender, approximate age, clothing style, and key facial expressions.
+
+    CRITICAL RULES for Locations (Scenes):
+    - Use ONLY static, physical concepts for location names.
+    - AVOID dynamic, psychological, or emotional compound concepts.
+    - Example: Change "Confession in a Dark Apartment" (阴暗公寓的告解) to "Dark Apartment" (阴暗公寓).
+    - Example: Change "Tense Office Meeting" (紧张的办公室会议) to "Office" (办公室).
+
     For each, provide a brief Visual Description based on the "步骤二" (Visual Prompts) section or the script content itself.
-    CRITICAL: Return JSON with structure:
+    
+    Return JSON with structure:
     { 
-      "characters": [ { "name": "Name", "description": "Visual details in Simplified Chinese..." } ], 
+      "characters": [ { "name": "Name", "description": "Detailed visual details including gender, age, outfit in Simplified Chinese..." } ], 
       "scenes": [ { "name": "Location Name", "description": "Environment details in Simplified Chinese..." } ] 
     }
-    Use Simplified Chinese for BOTH Names AND Descriptions (for consistent image generation).
+    Use Simplified Chinese for BOTH Names AND Descriptions.
     Script: "${script}"`;
     
     let result: any;
@@ -444,6 +458,7 @@ export const generateTopicIdeas = async (categoryName: string, templateName: str
         }
     });
 };
+
 export const generateScriptByScenes = async (topic: string, stylePrompt: string, styleName: string, templateName: string, duration: number, sceneCount: number, aspectRatio: string, model: string = 'gemini-3.1-flash-lite-preview'): Promise<{ title: string; outline: string; content: string }> => {
     return retryOperation(async () => {
         const prompt = `
@@ -476,12 +491,13 @@ export const generateScriptByScenes = async (topic: string, stylePrompt: string,
 
 ## 三、AI 图生视频-中文 AI 视频提示词
 ### 生成逻辑
-1. **动态扩展**：以首帧图为动态起点，自然延续为动态视频指令，严格匹配「单视频时长」的节奏控制。
-2. **镜头语言**：明确镜头运动（如推镜、拉镜、固定镜头）、转场方式。
+1. **动态扩展**：以首帧图为动态起点，自然延续为动态视频指令。视频提示词可以包含多个画面场景的切换描述，不一定只是首帧画面的单一延续。
+2. **镜头语言与拍摄手法**：明确镜头运动（如推镜、拉镜、固定镜头、环绕镜头、航拍等）、转场方式、以及多种拍摄手法（如特写、中景、远景切换，快动作、慢动作等）。
 3. **风格动态化**：将「视觉风格」转化为动态效果。
 4. **氛围营造**：添加音效/氛围音提示。
-5. **全局统一参数强制引用**：所有视频片段必须遵守预设的「全局统一参数」（背景音、音效、风格动态），保证多片段间的听觉与风格一致性。
+5. **全局统一参数强制引用**：所有视频片段必须遵守预设的「全局统一参数」（背景音、音效），保证多片段间的听觉与风格一致性。
 6. **禁止人声**：生成视频中的人物禁止说话及有旁白说话声音产出，因为人物说话需要单独配音。视频提示词中不要包含任何关于人物说话、台词或旁白的描述。
+7. **时长适配**：严格匹配「单视频时长」的节奏控制。
 
 ## 四、AI 配音（语音）提示词生成逻辑与输入要求
 ### 生成逻辑
@@ -496,14 +512,15 @@ export const generateScriptByScenes = async (topic: string, stylePrompt: string,
 音频提示词的内容必须严格区分角色，格式为“[角色名]：(风格/语气/口音/节奏/语速)台词内容”。
 1. 单人发言：[小明]：(带着酒后的冲动与意识模糊，慢吞吞地语速)老板那发型，其实我也觉得像……像那个还没熟透的柚子。
 2. 多位发言：[小明]：(疲惫且沙哑)那么……今天有什么安排？[旁白]：(低沉且富有磁性，语速平缓)他并不知道，危险正在靠近。[小红]：(兴奋且尖锐，语速极快)你绝对猜不到，我会给你一个惊喜！
-3. 旁白也算一个角色，请务必标注为“[旁白]”。
+3. **旁白与内心独白的严格区分（极其重要）**：
+   - 如果是**第三人称的客观叙述者**（不属于故事中的具体角色），请标注为 \`[旁白]\`。
+   - 如果是**角色自己的内心独白**、回忆或自我叙述，**必须标注为该角色的名字**，例如 \`[小明(内心独白)]\`。**绝对不能**将角色的内心独白标注为 \`[旁白]\`，否则会导致配音时性别或音色错乱！
 
 ## 五、全局统一参数预设生成
 请根据题材，生成一套完整的全局统一参数预设，包含：
 - 配音全局统一参数（主角、配角、旁白音色，音量平衡，语言等）
 - 背景环境音统一设定（主场景、转场场景、音量）
 - 音效统一设定（动作音效、情绪音效、响应速度）
-- 风格动态统一设定（视觉风格动态表现、动态节奏）
 
 ## 六、输出格式
 请严格输出一个 JSON 对象（不要包含任何其他 markdown 标记或解释说明），格式如下：
@@ -511,8 +528,7 @@ export const generateScriptByScenes = async (topic: string, stylePrompt: string,
   "global_params": {
     "voice_setting": "...",
     "background_audio": "...",
-    "sound_effects": "...",
-    "style_dynamics": "..."
+    "sound_effects": "..."
   },
   "scenes": [
     {
@@ -556,8 +572,7 @@ export const generateScriptByScenes = async (topic: string, stylePrompt: string,
         let contentText = "";
         contentText += `人声设定: ${globalParams.voice_setting || ''}\n`;
         contentText += `背景环境音: ${globalParams.background_audio || ''}\n`;
-        contentText += `音效设定: ${globalParams.sound_effects || ''}\n`;
-        contentText += `风格动态设定: ${globalParams.style_dynamics || ''}\n\n`;
+        contentText += `音效设定: ${globalParams.sound_effects || ''}\n\n`;
 
         const globalParamsText = contentText;
 
@@ -594,16 +609,18 @@ export const generateScript = async (finalScriptText: string, styleModifier: str
     - The script is formatted with [视频 X] headers.
     - Extract fields from labels: 场景名称, 角色名称, 画面描述, 绘画提示词, 视频提示词, 音频提示词.
     - Map to the output JSON structure below.
-    - 'visualPrompt' = 绘画提示词
+    - 'visualPrompt' = 绘画提示词 (Ensure this describes a SINGLE moment in time)
     - 'script' = (If Creative Idea is provided, prepend it: "创意想法: " + Creative Idea + "\\n\\n") + 场景名称 + "\\n" + 画面描述 + "\\n" + 音频提示词
-    - 'videoPrompt' = 视频提示词
-    - 'cameraPrompt' = 视频提示词
+    - 'videoPrompt' = 视频提示词 + "\\n" + (Global 背景环境音) + "\\n" + (Global 音效设定) (CRITICAL: Ensure actions in the videoPrompt are explicitly assigned to specific character names. DO NOT include any dialogue or audio prompts, characters should NOT speak.)
+    - 'cameraPrompt' = 从“视频提示词”中提取出的镜头语言（如：特写、中景、推镜等），不要包含多镜头描述。
     - 'character' = 角色名称 (Try to match with Core Characters if provided)
     - 'globalParams' = 全局统一参数预设 (The section before [视频 1])
     - CRITICAL: If '音频提示词' (Audio Prompt) contains dialogue between multiple characters (e.g., "角色1: ... 角色2: ...") or a narrator and a character, you MUST split them into separate entries in the 'audios' array.
     - Each entry in 'audios' must have a 'name' and a 'prompt'.
     - 'prompt' should include the style, tone, accent, rhythm, speed, emotion and the actual dialogue for THAT character, formatted as "(Description) Dialogue".
-    - Narrator (旁白) counts as a character.
+    - CRITICAL DISTINCTION FOR VOICE-OVERS (旁白): 
+      * If the voice-over is a third-person narrator (not a character in the story), label the name as "旁白" (Narrator).
+      * If the voice-over is actually a character's INNER MONOLOGUE (内心独白) or their own voice narrating their story, you MUST use THAT CHARACTER'S NAME (e.g., "John (内心独白)"). DO NOT use "旁白" if it's the character's own thoughts. This ensures the gender and voice match the character.
     - If fields are missing, infer them from context.
     
     Return JSON Array:
@@ -690,8 +707,13 @@ export const generateAssetImage = async (
         const descText = description ? `Visual Details: ${description}` : "";
 
         if (type === 'character') {
+            const identityHint = (name === '我' || name === '主角' || name === '女主' || name === '男主') 
+                ? `CRITICAL: This is the PROTAGONIST. Carefully follow the gender and appearance details in the Visual Details.` 
+                : "";
+            
             specificPrompt = `
             Task: Create full-body image of "${name}" on PURE WHITE BACKGROUND (#FFFFFF).
+            ${identityHint}
             STYLE: ${styleModifier}. Apply this style ONLY to the character's appearance, clothing, and textures.
             ${descText}
             POSTURE: If human, stand upright. If ANIMAL or NON-HUMAN, use its NATURAL POSTURE.
@@ -699,9 +721,12 @@ export const generateAssetImage = async (
             NO TEXT, NO SUBTITLES, NO CAPTIONS, NO WATERMARKS, NO LETTERS on the image.
             `;
         } else {
+            // Match user's requested format: Location + Core visual features
+            // Remove the "核心视觉特征：" prefix for a cleaner prompt
+            const cleanStyle = styleModifier.replace(/核心视觉特征[：:]\s*/g, '');
             specificPrompt = `
-            Task: Environment Concept Art for "${name}". 
-            STYLE: ${styleModifier}.
+            Task: Environment Concept Art.
+            Prompt: ${name}，${cleanStyle}。
             ${descText}
             Pure Scenery. NO PEOPLE.
             `;
@@ -722,11 +747,22 @@ export const generateSceneImage = async (
 ): Promise<string> => {
     const parts: any[] = [];
     // Constructed prompt handling Chinese visualPrompt gracefully
-    let promptInstructions = `Generate a cinematic image. Visual Prompt: "${visualPrompt}". Camera: "${cameraPrompt}". Aspect Ratio: ${aspectRatio}.`;
+    let promptInstructions = `Task: Create a SINGLE, unified cinematic frame. 
+    Main Subject & Action: "${visualPrompt}". 
+    Shot Type & Camera Angle: "${cameraPrompt}". 
+    Aspect Ratio: ${aspectRatio}.
+    
+    CRITICAL RULES:
+    - Generate ONLY ONE single image frame. 
+    - DO NOT generate a grid, storyboard, multi-panel, or sequence of images.
+    - NO split screens.
+    - NO text, captions, or watermarks.
+    - Focus on the STARTING state of the scene.
+    - Use the provided reference images for character and location consistency.`;
     
     const addImagePart = (data: string, mimeType: string) => { parts.push({ inline_data: { mime_type: mimeType, data: data } }); };
-    characters.forEach(c => { if (c.data && c.autoReference !== false) { addImagePart(c.data, c.mimeType); promptInstructions += ` [Ref Character: ${c.name}]`; } });
-    coreScenes.forEach(s => { if (s.data && s.autoReference !== false) { addImagePart(s.data, s.mimeType); promptInstructions += ` [Ref Location: ${s.name}]`; } });
+    characters.forEach(c => { if (c.data && c.autoReference !== false) { addImagePart(c.data, c.mimeType); promptInstructions += `\n- Reference Character [${c.name}]: Use this exact character appearance.`; } });
+    coreScenes.forEach(s => { if (s.data && s.autoReference !== false) { addImagePart(s.data, s.mimeType); promptInstructions += `\n- Reference Location [${s.name}]: Use this exact environment style/setting.`; } });
     if (sceneReferenceImages) sceneReferenceImages.forEach(img => { if (img?.data) { addImagePart(img.data, img.mimeType); promptInstructions += ` [Ref Composition]`; } });
     parts.push({ text: promptInstructions });
     return retryOperation(async () => await callVivaImageGen(parts, aspectRatio, model));

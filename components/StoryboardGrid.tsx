@@ -28,7 +28,7 @@ interface Props {
   onEnlarge: (base64Image: string) => void;
   aspectRatio: '9:16' | '16:9';
   videoModel: VideoModel;
-  onGenerateVideo?: (sceneIndex: number, duration: number, model: VideoModel, dialogue?: string) => void;
+  onGenerateVideo?: (sceneIndex: number, duration: number, model: VideoModel) => void;
   onGenerateAudio?: (sceneIndex: number, prompt: string, voiceConfig: { voiceName?: string; multiSpeakerVoiceConfig?: { speakerVoiceConfigs: { speaker: string; voiceName: string }[] } }) => void;
   onBatchGenerateVideos?: (model: VideoModel) => void;
   onEditImage?: (sceneIndex: number, instruction: string) => void;
@@ -195,7 +195,7 @@ const StoryboardGrid: React.FC<Props> = ({
                 onDownload={() => scene.imageUrl && handleDownloadImage(scene.imageUrl, scene.sceneNumber)}
                 onUpload={(f) => onManualUpload(index, f)}
                 onDelete={() => onDeleteImage(index)}
-                onGenerateVideo={(duration, dialogue) => onGenerateVideo && onGenerateVideo(index, duration, videoModel, dialogue)}
+                onGenerateVideo={(duration) => onGenerateVideo && onGenerateVideo(index, duration, videoModel)}
                 onGenerateAudio={(prompt, voiceConfig) => onGenerateAudio && onGenerateAudio(index, prompt, voiceConfig)}
                 onEditImage={() => setEditingSceneIndex(index)}
                 onCancelVideo={() => onCancelVideoGeneration && onCancelVideoGeneration(index)}
@@ -220,7 +220,7 @@ interface CardProps {
     onDownload: () => void;
     onUpload: (f: File) => void;
     onDelete: () => void;
-    onGenerateVideo: (duration: number, dialogue?: string) => void;
+    onGenerateVideo: (duration: number) => void;
     onGenerateAudio: (prompt: string, voiceConfig: { voiceName?: string; multiSpeakerVoiceConfig?: { speakerVoiceConfigs: { speaker: string; voiceName: string }[] } }) => void;
     onEditImage: () => void;
     onCancelVideo?: () => void;
@@ -446,21 +446,22 @@ const SceneRow: React.FC<CardProps> = ({
                             </button>
                         </div>
 
+                        {activeTab === 'video' && (
+                            <div className="mb-2 text-sm text-gray-600 bg-yellow-100 p-2 border-2 border-yellow-400 rounded">
+                                💡 提示：因 veo、grok 等视频模型对中文台词的呈现效果欠佳，故视频中人物暂不设置口型动作，台词统一通过音频生成以旁白形式配音呈现。
+                            </div>
+                        )}
                         <textarea 
                             value={
                                 activeTab === 'script' ? scene.script : 
                                 activeTab === 'visual' ? scene.visualPrompt : 
-                                activeTab === 'video' ? `${scene.videoPrompt || ''}\n\n${scene.globalParams || ''}` : ''
+                                activeTab === 'video' ? (scene.videoPrompt || `${scene.script}\n${scene.visualPrompt}`) : ''
                             }
                             onChange={(e) => {
                                 if (activeTab === 'script') onUpdateScript(index, e.target.value);
                                 else if (activeTab === 'visual') onUpdatePrompt(index, e.target.value, 'en');
                                 else if (activeTab === 'video') {
-                                    const newValue = e.target.value;
-                                    // Try to split by double newline if globalParams exists
-                                    const parts = newValue.split('\n\n');
-                                    const videoPrompt = parts[0];
-                                    onUpdateVideoPrompt && onUpdateVideoPrompt(index, videoPrompt);
+                                    onUpdateVideoPrompt && onUpdateVideoPrompt(index, e.target.value);
                                 }
                             }}
                             className="w-full bg-yellow-50 border-2 border-black p-4 text-lg font-medium font-sans resize-none flex-1 min-h-[500px] outline-none focus:bg-white transition-colors leading-relaxed"
@@ -501,7 +502,7 @@ const SceneRow: React.FC<CardProps> = ({
                         </div>
                         
                         <button 
-                            onClick={() => onGenerateVideo(selectedDuration, `${speakerA.prompt}\n${speakerB.prompt}`)}
+                            onClick={() => onGenerateVideo(selectedDuration)}
                             disabled={scene.isGeneratingVideo || !scene.imageUrl}
                             className={clsx(
                                 "flex-1 px-4 py-3 font-normal tracking-wide text-white flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-lg",

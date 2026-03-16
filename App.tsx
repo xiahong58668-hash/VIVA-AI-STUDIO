@@ -1,6 +1,7 @@
 
 
 import React, { useState, useRef, useEffect } from 'react';
+import { get, set } from 'idb-keyval';
 import { AppStep, Scene, StyleOption, AssetItem, ScriptCategory, ScriptTemplate, ScriptOption, VideoModel } from './types';
 import { STYLES, SCRIPT_CATEGORIES, getValidDurations } from './constants';
 import { generateScript, generateSceneImage, extractAssetsFromScript, setCustomConfig, testApiConnection, generateAssetImage, generateTopicIdeas, generateScriptByScenes, generateVideo, editSceneImage, generateAudio } from './services/geminiService';
@@ -276,6 +277,81 @@ function App() {
   // AbortControllers for Video Generation
   const videoControllers = useRef<Record<number, AbortController>>({});
 
+  // --- State Persistence ---
+  const [isStateLoaded, setIsStateLoaded] = useState(false);
+
+  useEffect(() => {
+    const loadState = async () => {
+      try {
+        const savedState = await get('viva_app_state');
+        if (savedState) {
+          if (savedState.step !== undefined) setStep(savedState.step);
+          if (savedState.topic !== undefined) setTopic(savedState.topic);
+          if (savedState.selectedStylePath !== undefined) setSelectedStylePath(savedState.selectedStylePath);
+          if (savedState.selectedCategory !== undefined) setSelectedCategory(savedState.selectedCategory);
+          if (savedState.selectedTemplate !== undefined) setSelectedTemplate(savedState.selectedTemplate);
+          if (savedState.videoDuration !== undefined) setVideoDuration(savedState.videoDuration);
+          if (savedState.sceneCount !== undefined) setSceneCount(savedState.sceneCount);
+          if (savedState.aspectRatio !== undefined) setAspectRatio(savedState.aspectRatio);
+          if (savedState.draftScript !== undefined) setDraftScript(savedState.draftScript);
+          if (savedState.scriptOptions !== undefined) setScriptOptions(savedState.scriptOptions);
+          if (savedState.scenes !== undefined) {
+            const resetScenes = savedState.scenes.map((scene: Scene) => ({
+              ...scene,
+              isGeneratingImage: false,
+              isGeneratingVideo: false,
+              isGeneratingVideoPrompt: false,
+              isTranslatingVisual: false,
+              isTranslatingVideo: false,
+              audios: scene.audios?.map(audio => ({ ...audio, isGenerating: false }))
+            }));
+            setScenes(resetScenes);
+          }
+          if (savedState.textModel !== undefined) setTextModel(savedState.textModel);
+          if (savedState.assetModel !== undefined) setAssetModel(savedState.assetModel);
+          if (savedState.videoModel !== undefined) setVideoModel(savedState.videoModel);
+          if (savedState.audioModel !== undefined) setAudioModel(savedState.audioModel);
+          if (savedState.characters !== undefined) setCharacters(savedState.characters);
+          if (savedState.coreScenes !== undefined) setCoreScenes(savedState.coreScenes);
+        }
+      } catch (e) {
+        console.error('Failed to load state', e);
+      } finally {
+        setIsStateLoaded(true);
+      }
+    };
+    loadState();
+  }, []);
+
+  useEffect(() => {
+    if (!isStateLoaded) return;
+    const stateToSave = {
+      step,
+      topic,
+      selectedStylePath,
+      selectedCategory,
+      selectedTemplate,
+      videoDuration,
+      sceneCount,
+      aspectRatio,
+      draftScript,
+      scriptOptions,
+      scenes,
+      textModel,
+      assetModel,
+      videoModel,
+      audioModel,
+      characters,
+      coreScenes,
+    };
+    
+    const timeoutId = setTimeout(() => {
+      set('viva_app_state', stateToSave).catch(e => console.error('Failed to save state', e));
+    }, 1000); // 1 second debounce
+    
+    return () => clearTimeout(timeoutId);
+  }, [isStateLoaded, step, topic, selectedStylePath, selectedCategory, selectedTemplate, videoDuration, sceneCount, aspectRatio, draftScript, scriptOptions, scenes, textModel, assetModel, videoModel, audioModel, characters, coreScenes]);
+
   // Calculate Reachable Steps
   const enabledSteps = [AppStep.MODEL_CONFIG, AppStep.INPUT];
   if (scriptOptions.length > 0 || draftScript) enabledSteps.push(AppStep.SCRIPT_EDIT);
@@ -489,7 +565,7 @@ function App() {
   };
 
   // --- Video Generation Handlers ---
-  const handleGenerateVideo = async (sceneIndex: number, duration: number, model: VideoModel, dialogue?: string) => {
+  const handleGenerateVideo = async (sceneIndex: number, duration: number, model: VideoModel) => {
     const scene = scenes[sceneIndex];
     if (!scene.imageUrl) return;
 
@@ -507,8 +583,35 @@ function App() {
 
     try {
       let prompt = scene.videoPrompt || scene.visualPrompt || scene.script;
-      if (dialogue) prompt += `\nDialogue/Speech: ${dialogue}. The character in the video should be speaking these lines.`;
-      if (scene.globalParams) prompt += `\nGlobal Settings: ${scene.globalParams}`;
+      
+      // Filter characters to only include those mentioned in this scene to improve consistency
+      const sceneCharacters = characters.filter(c => 
+          scene.character?.includes(c.name) || 
+          scene.script?.includes(c.name) ||
+          scene.visualPrompt?.includes(c.name) ||
+          scene.videoPrompt?.includes(c.name)
+      );
+
+      if (sceneCharacters.length > 0) {
+          prompt += `\n\n[Character Visual Mapping - Use this to identify characters in the image]`;
+          sceneCharacters.forEach(c => {
+              if (c.description) {
+                  prompt += `\n- ${c.name}: ${c.description}`;
+              } else {
+                  prompt += `\n- ${c.name}`;
+              }
+          });
+      }
+      
+      prompt += `\n\nCRITICAL INSTRUCTIONS: 
+1. Identify the characters in the provided image based on the [Character Visual Mapping].
+2. Ensure the actions described for each character are performed ONLY by that specific character.
+3. Characters MUST NOT speak. Do not generate any lip movements or speech.`;
+      
+      if (scene.globalParams) {
+        prompt += `\n\n[Global Environment Settings]`;
+        prompt += `\n${scene.globalParams}`;
+      }
       
       const videoUrl = await generateVideo(
         scene.imageUrl,
@@ -719,7 +822,15 @@ function App() {
             try {
                 // FIXED: Use visualPrompt || script to prioritize specialized prompt
                 const promptToUse = scene.visualPrompt || scene.script;
-                const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt, characters, coreScenes, aspectRatio, scene.sceneReferenceImages || [], assetModel);
+                
+                // Filter characters to only include those mentioned in this scene to improve consistency
+                const sceneCharacters = characters.filter(c => 
+                    scene.character?.includes(c.name) || 
+                    scene.script?.includes(c.name) ||
+                    scene.visualPrompt?.includes(c.name)
+                );
+                
+                const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt, sceneCharacters, coreScenes, aspectRatio, scene.sceneReferenceImages || [], assetModel);
                 
                 if (loadingSession.current !== sessionId) return;
 
@@ -770,7 +881,14 @@ function App() {
           const refScenesRaw = scene.sceneReferenceImages || [];
           // Redraw Logic: prefers visualPrompt
           const promptToUse = scene.visualPrompt || scene.script;
-          const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt, characters, coreScenes, aspectRatio, refScenesRaw, assetModel);
+          
+          const sceneCharacters = characters.filter(c => 
+              scene.character?.includes(c.name) || 
+              scene.script?.includes(c.name) ||
+              scene.visualPrompt?.includes(c.name)
+          );
+
+          const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt, sceneCharacters, coreScenes, aspectRatio, refScenesRaw, assetModel);
           setScenes(prev => {
               const next = [...prev];
               next[index] = { ...next[index], imageUrl: b64, imageHistory: [...(next[index].imageHistory || []), b64], isGeneratingImage: false };
@@ -950,6 +1068,8 @@ function App() {
   const assetGridClass = aspectRatio === '16:9'
       ? "grid grid-cols-1 md:grid-cols-2 gap-8" // 2 cols for landscape, increased gap
       : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"; // 3 cols for portrait/default
+
+  if (!isStateLoaded) return null;
 
   return (
     <div className="min-h-screen pb-20 font-sans relative">
