@@ -960,6 +960,14 @@ function App() {
           });
       }
   };
+
+  const handleDeleteVideo = (index: number) => {
+      setScenes(prev => {
+          const updated = [...prev];
+          updated[index] = { ...updated[index], videoUrls: [], videoUrl: undefined };
+          return updated;
+      });
+  };
   
   const handleSaveConfig = () => {
       if(apiKeyInput.trim() || apiKey2Input.trim()) {
@@ -1118,12 +1126,23 @@ function App() {
                   <X size={64} strokeWidth={1.5} />
               </button>
               <div className="w-full h-full flex items-center justify-center p-4">
-                  <img 
-                      src={viewingAsset.previewUrl} 
-                      alt={viewingAsset.name} 
-                      className="max-w-full max-h-full object-contain shadow-2xl" 
-                      onClick={e => e.stopPropagation()} 
-                  />
+                  {viewingAsset.mimeType.startsWith('video/') ? (
+                      <video 
+                          src={viewingAsset.previewUrl} 
+                          controls 
+                          autoPlay 
+                          loop 
+                          className="max-w-full max-h-full shadow-2xl"
+                          onClick={e => e.stopPropagation()}
+                      />
+                  ) : (
+                      <img 
+                          src={viewingAsset.previewUrl} 
+                          alt={viewingAsset.name} 
+                          className="max-w-full max-h-full object-contain shadow-2xl" 
+                          onClick={e => e.stopPropagation()} 
+                      />
+                  )}
               </div>
           </div>
       )}
@@ -1804,7 +1823,15 @@ function App() {
                 onSelectSceneImage={(i, h) => { const s=[...scenes]; if(s[i].imageHistory?.[h]) s[i].imageUrl=s[i].imageHistory[h]; setScenes(s); }}
                 onManualUpload={handleManualSceneImageUpload}
                 onDeleteImage={handleDeleteSceneImage}
-                onEnlarge={(imageUrl) => setViewingAsset({ name: "Storyboard Image", type: 'scene', data: imageUrl, previewUrl: `data:image/png;base64,${imageUrl}`, id: 'viewing', mimeType: 'image/png' })}
+                onDeleteVideo={handleDeleteVideo}
+                onEnlarge={(url, type) => setViewingAsset({ 
+                    name: type === 'video' ? "Generated Video" : "Storyboard Image", 
+                    type: 'scene', 
+                    data: url, 
+                    previewUrl: type === 'video' ? url : `data:image/png;base64,${url}`, 
+                    id: 'viewing', 
+                    mimeType: type === 'video' ? 'video/mp4' : 'image/png' 
+                })}
                 aspectRatio={aspectRatio}
                 videoModel={videoModel}
                 onGenerateVideo={handleGenerateVideo}

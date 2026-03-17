@@ -25,7 +25,8 @@ interface Props {
   onSelectSceneImage?: (sceneIndex: number, historyIndex: number) => void;
   onManualUpload: (sceneIndex: number, file: File) => void;
   onDeleteImage: (sceneIndex: number) => void;
-  onEnlarge: (base64Image: string) => void;
+  onDeleteVideo?: (sceneIndex: number) => void;
+  onEnlarge: (url: string, type: 'image' | 'video') => void;
   aspectRatio: '9:16' | '16:9';
   videoModel: VideoModel;
   onGenerateVideo?: (sceneIndex: number, duration: number, model: VideoModel) => void;
@@ -39,7 +40,7 @@ interface Props {
 
 const StoryboardGrid: React.FC<Props> = ({ 
     scenes, assets, onRegenerateImage, onUpdatePrompt, onUpdateScript, onUpdateVideoPrompt,
-    onSelectSceneImage, onManualUpload, onDeleteImage, onEnlarge, aspectRatio, videoModel, onGenerateVideo, onGenerateAudio, onBatchGenerateVideos, onEditImage, onRefinePrompt, topic,
+    onSelectSceneImage, onManualUpload, onDeleteImage, onDeleteVideo, onEnlarge, aspectRatio, videoModel, onGenerateVideo, onGenerateAudio, onBatchGenerateVideos, onEditImage, onRefinePrompt, topic,
     onCancelVideoGeneration
 }) => {
   const [isExporting, setIsExporting] = useState(false);
@@ -104,7 +105,7 @@ const StoryboardGrid: React.FC<Props> = ({
                   <div className="flex justify-between items-center mb-6 border-b-2 border-black pb-4">
                       <h3 className="text-3xl font-normal text-black flex items-center gap-2">
                           <Wand2 className="text-[#FACC15]" size={32} /> 
-                          AI 魔法编辑
+                          分镜图编辑
                       </h3>
                       <button onClick={() => setEditingSceneIndex(null)} className="text-black hover:text-red-500 transition-colors">
                           <X size={32} strokeWidth={3} />
@@ -138,7 +139,7 @@ const StoryboardGrid: React.FC<Props> = ({
                             disabled={!editInstruction.trim()}
                             className="px-8 py-3 bg-[#FACC15] border-2 border-black hover:bg-[#EAB308] text-black font-normal tracking-wide text-xl disabled:opacity-50"
                           >
-                              应用魔法
+                              修改
                           </button>
                       </div>
                   </div>
@@ -195,6 +196,7 @@ const StoryboardGrid: React.FC<Props> = ({
                 onDownload={() => scene.imageUrl && handleDownloadImage(scene.imageUrl, scene.sceneNumber)}
                 onUpload={(f) => onManualUpload(index, f)}
                 onDelete={() => onDeleteImage(index)}
+                onDeleteVideo={() => onDeleteVideo && onDeleteVideo(index)}
                 onGenerateVideo={(duration) => onGenerateVideo && onGenerateVideo(index, duration, videoModel)}
                 onGenerateAudio={(prompt, voiceConfig) => onGenerateAudio && onGenerateAudio(index, prompt, voiceConfig)}
                 onEditImage={() => setEditingSceneIndex(index)}
@@ -216,10 +218,11 @@ interface CardProps {
     onUpdatePrompt: (i: number, p: string, l: 'en' | 'zh') => void;
     onUpdateScript: (i: number, s: string) => void;
     onUpdateVideoPrompt?: (i: number, p: string) => void;
-    onEnlarge: (img: string) => void;
+    onEnlarge: (url: string, type: 'image' | 'video') => void;
     onDownload: () => void;
     onUpload: (f: File) => void;
     onDelete: () => void;
+    onDeleteVideo?: () => void;
     onGenerateVideo: (duration: number) => void;
     onGenerateAudio: (prompt: string, voiceConfig: { voiceName?: string; multiSpeakerVoiceConfig?: { speakerVoiceConfigs: { speaker: string; voiceName: string }[] } }) => void;
     onEditImage: () => void;
@@ -228,7 +231,7 @@ interface CardProps {
 
 const SceneRow: React.FC<CardProps> = ({ 
     scene, index, aspectRatio, videoModel, characters, onRegenerate, onUpdatePrompt, onUpdateScript, onUpdateVideoPrompt,
-    onEnlarge, onDownload, onUpload, onDelete, onGenerateVideo, onGenerateAudio, onEditImage, onCancelVideo
+    onEnlarge, onDownload, onUpload, onDelete, onDeleteVideo, onGenerateVideo, onGenerateAudio, onEditImage, onCancelVideo
 }) => {
     const fileRef = useRef<HTMLInputElement>(null);
     const aspectClass = aspectRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video';
@@ -310,8 +313,8 @@ const SceneRow: React.FC<CardProps> = ({
                         )}
 
                         {/* Video Overlay/Display */}
-                        {videoUrls.length > 0 && (
-                            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center">
+                        {videoUrls.length > 0 && !showImage && (
+                            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center group/video">
                                 {videoUrls.slice(0, 1).map((url, idx) => (
                                     <div key={idx} className="relative bg-black/20 w-full h-full flex items-center justify-center">
                                         <video 
@@ -322,6 +325,23 @@ const SceneRow: React.FC<CardProps> = ({
                                             loop
                                             muted
                                         />
+                                        {/* Video Controls Overlay */}
+                                        <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover/video:opacity-100 transition-opacity z-30">
+                                            <button 
+                                                onClick={() => onEnlarge(url, 'video')} 
+                                                className="bg-white/90 border-2 border-black p-2 hover:bg-white transition-colors shadow-md"
+                                                title="全屏查看"
+                                            >
+                                                <Maximize2 size={20} />
+                                            </button>
+                                            <button 
+                                                onClick={() => setShowImage(true)}
+                                                className="bg-[#FACC15]/90 border-2 border-black p-2 hover:bg-[#FACC15] transition-colors shadow-md"
+                                                title="隐藏视频，显示分镜"
+                                            >
+                                                <Archive size={20} />
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -355,8 +375,20 @@ const SceneRow: React.FC<CardProps> = ({
                         {/* Hover Overlay Controls (Only for Image) */}
                         {!scene.isGeneratingVideo && scene.imageUrl && (
                             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex flex-col items-center justify-center gap-3 p-4">
+                                {/* Top Right Toggle Button (if video exists) */}
+                                {videoUrls.length > 0 && showImage && (
+                                    <div className="absolute top-4 right-4 z-30">
+                                        <button 
+                                            onClick={() => setShowImage(false)}
+                                            className="bg-[#10B981]/90 border-2 border-black p-2 hover:bg-[#10B981] text-white transition-colors shadow-md"
+                                            title="显示视频"
+                                        >
+                                            <Film size={20} />
+                                        </button>
+                                    </div>
+                                )}
                                 <div className="flex gap-2">
-                                    <button onClick={() => onEnlarge(scene.imageUrl!)} className="bg-white border-2 border-black p-3 hover:bg-gray-100 transform hover:scale-110 transition-transform" title="放大">
+                                    <button onClick={() => onEnlarge(scene.imageUrl!, 'image')} className="bg-white border-2 border-black p-3 hover:bg-gray-100 transform hover:scale-110 transition-transform" title="放大">
                                         <Maximize2 size={24} />
                                     </button>
                                     <button onClick={onDownload} className="bg-[#FACC15] border-2 border-black p-3 hover:bg-[#EAB308] transform hover:scale-110 transition-transform" title="下载图片">
