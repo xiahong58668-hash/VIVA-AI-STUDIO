@@ -1,1 +1,0 @@
-ull&&c!==void 0?c:2,this.fetch=(h=_.fetch)!==null&&

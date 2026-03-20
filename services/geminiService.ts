@@ -418,25 +418,33 @@ export const extractAssetsFromScript = async (script: string): Promise<{ charact
   });
 };
 
-export const generateTopicIdeas = async (categoryName: string, templateName: string, styleName: string, model: string = 'gemini-3.1-flash-lite-preview'): Promise<string[]> => {
+export const generateTopicIdeas = async (categoryName: string, templateName: string, templateDescription: string, styleName: string, model: string = 'gemini-3.1-flash-lite-preview'): Promise<string[]> => {
     return retryOperation(async () => {
         const prompt = `
-你是一位顶级的短视频创意策划专家。请根据以下题材，生成 10 条不同的爆款创意想法。
+角色：AI 故事汇创意策划师
+任务：根据用户选择的故事题材，生成 10 个差异化的创意点子，用于内容创作
 
-【题材名称】：${templateName}
+输入：
+用户选择的题材：【${templateName}】
+题材描述：${templateDescription}
 
-【生成要求】：
-1. 创意需符合“小而美”风格：从日常生活中的细微之处切入，情感点集中，节奏舒缓但有张力，适合8-15秒短视频表达。钩子要能快速抓住观众，后续发展通过细节铺垫和情绪递进自然展开，避免过于突兀的反转。
-2. 每一条创意必须严格包含以下三个部分：
-   - 核心钩子：一句简短但引人好奇的话，点出日常中的异常或情感冲突，20个字以内。
-   - 一句话简介：用 30-50 字讲清核心冲突 + 反转/看点，强调情感或悬念的递进。
-   - 标签：采用“1个题材标签 + 2-3个情绪标签 + 1个抖音通用大流量标签”，例如 #题材 #情绪1 #情绪2 #抖音热门。
-3. 创意要具有极强的吸引力，符合短视频平台的传播逻辑（如共鸣、悬念、治愈等）。语言表达要使用生活化的大白话，避免书面语，通俗易懂。严禁在创意想法中使用第一人称（如“我”、“我们”），必须使用第三人称（如“他”、“她”、“男子”、“女孩”等）进行客观叙述。
-4. 严格输出一个 JSON 数组（不要包含任何其他 markdown 标记或解释说明），格式如下：
+输出格式（严格遵守）：
+主题：（一句话核心亮点，≤20 字，可用于短视频标题）
+简介：（60 字以内，讲清主角、核心设定、冲突、看点）
+标签：采用“1 个题材标签 + 2-3 个情绪标签 + 1 个抖音通用大流量标签”，例如 #题材 #情绪1 #情绪2 #抖音热门
+
+## 创作要求：
+1. 严格贴合【${templateName}】的风格调性，比如沙雕脑洞要搞笑、修仙爽文要突出升级打脸、规则怪谈要突出诡异规则。
+2. 10 个创意方向必须差异化（比如不同主角身份、不同核心冲突、不同结局走向）。
+3. 语言要接地气，符合短视频/网文/短剧的传播特点，自带记忆点和传播潜力。
+4. 简介不要太啰嗦，重点突出“钩子”，让用户一眼就想继续看下去。
+5. 语言表达要使用生活化的大白话，避免书面语，通俗易懂。严禁在创意想法中使用第一人称（如“我”、“我们”），必须使用第三人称（如“他”、“她”、“男子”、“女孩”等）进行客观叙述。
+
+严格输出一个 JSON 数组（不要包含任何其他 markdown 标记或解释说明），格式如下：
 [
   {
-    "hook": "一句话戳中爽点/泪点/好奇心",
-    "intro": "30-50字的简介，讲清冲突与反转",
+    "title": "主题内容",
+    "intro": "简介内容",
     "tags": "#标签1 #标签2 #标签3"
   }
 ]
@@ -444,7 +452,7 @@ export const generateTopicIdeas = async (categoryName: string, templateName: str
         
         let jsonStr = "";
         if (getActiveApiKey()) {
-            jsonStr = await callVivaTextAI(prompt, "Creative Director", true, undefined, model);
+            jsonStr = await callVivaTextAI(prompt, "AI 故事汇创意策划师", true, undefined, model);
         } else {
             const ai = getDefaultClient();
             const response = await ai.models.generateContent({
@@ -458,7 +466,7 @@ export const generateTopicIdeas = async (categoryName: string, templateName: str
         try {
             const topics = JSON.parse(cleanJson(jsonStr));
             if (Array.isArray(topics)) {
-                return topics.map((t: any) => `【${templateName}】：${t.hook} 一句话简介：${t.intro} 标签：${t.tags}`);
+                return topics.map((t: any) => `【${templateName}】主题：${t.title} 简介：${t.intro} 标签：${t.tags}`);
             }
             return [];
         } catch (e) {
@@ -588,7 +596,7 @@ ${script}
     });
 };
 
-export const generateAllEpisodes = async (topic: string, stylePrompt: string, styleName: string, templateName: string, duration: string, episodeCount: number, sceneCount: number, aspectRatio: string, model: string = 'gemini-3.1-flash-lite-preview'): Promise<{ episodes: { title: string; content: string }[] }> => {
+export const generateAllEpisodes = async (topic: string, stylePrompt: string, styleName: string, templateName: string, templateDescription: string, duration: string, episodeCount: number, sceneCount: number, aspectRatio: string, model: string = 'gemini-3.1-flash-lite-preview'): Promise<{ episodes: { title: string; content: string }[] }> => {
     return retryOperation(async () => {
         const prompt = `
 # 任务指令
@@ -600,14 +608,16 @@ export const generateAllEpisodes = async (topic: string, stylePrompt: string, st
 # 核心要求（非常重要）
 1. **命名一致性**：在所有分镜和剧本中，相同的角色和场景必须使用完全一致的名称。例如：如果角色叫“小明”，则不能在其他地方称呼他为“他”或“男孩”；如果场景是“卧室”，则不能称呼为“卧房”。这些名称将直接作为绘图提示词。
 2. **故事分布**：请将整个故事合理地分布在 ${episodeCount} 集中。严禁在第 1 集就讲完整个故事。每一集都应该是故事的一个阶段，确保剧情的连贯性和悬念。
+3. **题材契合度**：严格遵循题材描述中的核心要求和风格导向。
 
 # 核心参数
 1. 故事题材：${templateName}
-2. 视觉风格：${styleName}
-3. 创意主题：${topic || '自动构思'}
-4. 单集时长：${duration}
-5. 总集数：${episodeCount}
-6. 画面比例：${aspectRatio}
+2. 题材描述：${templateDescription}
+3. 视觉风格：${styleName}
+4. 创意主题：${topic || '自动构思'}
+5. 单集时长：${duration}
+6. 总集数：${episodeCount}
+7. 画面比例：${aspectRatio}
 
 # 生成要求
 1. 分镜：每集必须生成 ${sceneCount} 个分镜，以适配 ${duration} 的时长。确保镜头切换频繁（平均每 2-3 秒一个镜头），避免单张画面停留过久，增强动态漫的视觉观感。
@@ -649,7 +659,7 @@ export const generateAllEpisodes = async (topic: string, stylePrompt: string, st
     });
 };
 
-export const generateScriptByScenes = async (topic: string, stylePrompt: string, styleName: string, templateName: string, duration: string, episodeCount: number, currentEpisode: number, sceneCount: number, aspectRatio: string, model: string = 'gemini-3.1-flash-lite-preview'): Promise<{ title: string; outline: string; content: string }> => {
+export const generateScriptByScenes = async (topic: string, stylePrompt: string, styleName: string, templateName: string, templateDescription: string, duration: string, episodeCount: number, currentEpisode: number, sceneCount: number, aspectRatio: string, model: string = 'gemini-3.1-flash-lite-preview'): Promise<{ title: string; outline: string; content: string }> => {
     return retryOperation(async () => {
         const prompt = `
 # 任务指令
@@ -659,14 +669,16 @@ export const generateScriptByScenes = async (topic: string, stylePrompt: string,
 
 # 核心要求（非常重要）
 1. **命名一致性**：在所有分镜和剧本中，相同的角色和场景必须使用完全一致的名称。例如：如果角色叫“小明”，则不能在其他地方称呼他为“他”或“男孩”；如果场景是“卧室”，则不能称呼为“卧房”。这些名称将直接作为绘图提示词。
+2. **题材契合度**：严格遵循题材描述中的核心要求和风格导向。
 
 # 核心参数
 1. 故事题材：${templateName}
-2. 视觉风格：${styleName}
-3. 创意主题：${topic || '自动构思'}
-4. 单集时长：${duration}
-5. 当前生成集数：第 ${currentEpisode} 集
-6. 画面比例：${aspectRatio}
+2. 题材描述：${templateDescription}
+3. 视觉风格：${styleName}
+4. 创意主题：${topic || '自动构思'}
+5. 单集时长：${duration}
+6. 当前生成集数：第 ${currentEpisode} 集
+7. 画面比例：${aspectRatio}
 
 # 生成要求
 1. 分镜：本集必须生成 ${sceneCount} 个分镜，以适配 ${duration} 的时长。确保镜头切换频繁（平均每 2-3 秒一个镜头），避免单张画面停留过久，增强动态漫的视觉观感。

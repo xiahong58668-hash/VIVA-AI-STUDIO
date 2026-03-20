@@ -779,7 +779,7 @@ function App() {
     const sessionId = ++generateTopicsSession.current;
     setIsGeneratingTopics(true);
     try {
-        const ideas = await generateTopicIdeas(selectedCategory.name, selectedTemplate.name, "", textModel);
+        const ideas = await generateTopicIdeas(selectedCategory.name, selectedTemplate.name, selectedTemplate.description || "", "", textModel);
         if (generateTopicsSession.current !== sessionId) return; // Cancelled
         
         setTopicSuggestions(ideas);
@@ -809,7 +809,7 @@ function App() {
     setLoadingMessage(`AI is writing and optimizing your script for all episodes...`);
     setError(null);
     try {
-        const result = await generateAllEpisodes(topic, stylePrompt, styleNameCn, selectedTemplate!.name, episodeDuration, parseInt(episodeCount) || 1, sceneCount, aspectRatio, textModel);
+        const result = await generateAllEpisodes(topic, stylePrompt, styleNameCn, selectedTemplate!.name, selectedTemplate!.description || "", episodeDuration, parseInt(episodeCount) || 1, sceneCount, aspectRatio, textModel);
         if (loadingSession.current !== sessionId) return;
 
         const newEpisodesScript: Record<number, string> = {};
@@ -1868,6 +1868,12 @@ function App() {
                             </button>
                         ))}
                     </div>
+                    {selectedTemplate && (
+                        <div className="mt-4 p-4 bg-[#FACC15] border-2 border-black text-black font-sans text-sm leading-relaxed animate-in fade-in slide-in-from-top-2 duration-200">
+                            <span className="font-black uppercase mr-2">THEME FOCUS / 题材核心:</span>
+                            {selectedTemplate.description}
+                        </div>
+                    )}
                 </div>
             )}
 
