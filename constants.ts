@@ -128,7 +128,7 @@ export const STYLES: StyleOption[] = [
     name: '波普漫画风',
     description: '网点纹理/高饱和度原色',
     previewUrl: 'https://picsum.photos/seed/popart/300/200',
-    promptModifier: '核心视觉特征：网点纹理、本戴点、对话气泡框、高饱和度原色、重复图案、美式复古漫画感',
+    promptModifier: '核心视觉特征：网点纹理、本戴点、高饱和度原色、重复图案、美式复古漫画感。禁止在画面中出现任何文字、字母或拟声词（如 "POW!", "BANG!" 等），除非提示词中明确要求包含特定文字。',
   },
   {
     id: 'cel_shading',

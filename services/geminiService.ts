@@ -3,7 +3,7 @@
 import { GoogleGenAI, Type, Schema, Modality } from "@google/genai";
 import { Scene, AssetItem, ChatMessage, ScriptOption, VideoModel } from "../types";
 import { AI_SCREENWRITER_INSTRUCTION, SHOT_FLOW_KB, VISUAL_STYLE_KB, EDITING_ANALYSIS_KB } from "../constants";
-import { agentConfig } from '../agentConfig';
+import { proxyConfig as agentConfig } from '../src/proxyConfig';
 
 // Helper to add WAV header to raw PCM data
 const addWavHeader = (pcmData: Uint8Array, sampleRate: number): Uint8Array => {
@@ -182,7 +182,6 @@ const TEXT_MODELS = [
 ];
 
 const IMAGE_MODELS = [
-    'gemini-2.5-flash-image',
     'gemini-3-pro-image-preview',
     'gemini-3.1-flash-image-preview'
 ];
@@ -360,18 +359,24 @@ export const extractAssetsFromScript = async (script: string): Promise<{ charact
     const prompt = `Analyze the script and extract specific character names and core location names.
     
     CRITICAL RULES for Characters:
+    - ONLY extract characters that appear VISUALLY in the scenes.
+    - DO NOT extract "声音" (voice), "旁白" (narrator), or any non-visual audio elements as characters.
     - For each character, carefully analyze the script context to infer their GENDER, age, and personality.
     - Pay close attention to relationship terms (e.g., "闺蜜" usually implies the protagonist is female, "兄弟" might imply male).
     - If the name is "我" or "主角", look for dialogue or descriptions that reveal their identity.
     - Provide a detailed Visual Description (Simplified Chinese) including gender, approximate age, clothing style, and key facial expressions.
+    - If a character is just a voice (e.g., "母亲的声音"), DO NOT extract it as a character.
 
     CRITICAL RULES for Locations (Scenes):
     - Use ONLY static, physical concepts for location names.
     - AVOID dynamic, psychological, or emotional compound concepts.
+    - AVOID redundant extraction: If a location is a sub-element or part of another location (e.g., a "closet", "window", "bedside table", "door", or "floor" in a "bedroom"), DO NOT extract it as a separate core location if the parent location ("bedroom") is already extracted. Instead, include these details in the parent location's description.
     - Example: Change "Confession in a Dark Apartment" (阴暗公寓的告解) to "Dark Apartment" (阴暗公寓).
     - Example: Change "Tense Office Meeting" (紧张的办公室会议) to "Office" (办公室).
+    - If a location is a sub-element or part of another location, explicitly mention the parent location in its description to ensure visual consistency.
+    - **EXTREMELY IMPORTANT**: Do not extract furniture or architectural details (like "床头柜", "地板", "门") as separate scenes. They should be part of the main room scene.
 
-    For each, provide a brief Visual Description based on the "步骤二" (Visual Prompts) section or the script content itself.
+    For each, provide a brief Visual Description based on the script content itself.
     
     Return JSON with structure:
     { 
@@ -401,7 +406,10 @@ export const extractAssetsFromScript = async (script: string): Promise<{ charact
             const description = item.description || "";
             return { name, description };
         })
-        .filter(item => item.name !== '旁白');
+        .filter(item => {
+            const n = item.name.toLowerCase();
+            return n !== '旁白' && !n.includes('声音') && !n.includes('旁白') && !n.includes('音效') && !n.includes('配音') && !n.includes('音');
+        });
 
     return { 
         characters: sanitize(result.characters || []), 
@@ -418,16 +426,17 @@ export const generateTopicIdeas = async (categoryName: string, templateName: str
 【题材名称】：${templateName}
 
 【生成要求】：
-1. 每一条创意必须严格包含以下三个部分：
-   - 核心钩子：一句话戳中爽点/泪点/好奇心。
-   - 一句话简介：用 15-25 字讲清核心冲突 + 反转/看点。
-   - 标签：包含 #题材关键词 #爽点/情绪词 #爆款标签。
-2. 创意要具有极强的吸引力，符合短视频平台的传播逻辑。
-3. 严格输出一个 JSON 数组（不要包含任何其他 markdown 标记或解释说明），格式如下：
+1. 创意需符合“小而美”风格：从日常生活中的细微之处切入，情感点集中，节奏舒缓但有张力，适合8-15秒短视频表达。钩子要能快速抓住观众，后续发展通过细节铺垫和情绪递进自然展开，避免过于突兀的反转。
+2. 每一条创意必须严格包含以下三个部分：
+   - 核心钩子：一句简短但引人好奇的话，点出日常中的异常或情感冲突，20个字以内。
+   - 一句话简介：用 30-50 字讲清核心冲突 + 反转/看点，强调情感或悬念的递进。
+   - 标签：采用“1个题材标签 + 2-3个情绪标签 + 1个抖音通用大流量标签”，例如 #题材 #情绪1 #情绪2 #抖音热门。
+3. 创意要具有极强的吸引力，符合短视频平台的传播逻辑（如共鸣、悬念、治愈等）。语言表达要使用生活化的大白话，避免书面语，通俗易懂。严禁在创意想法中使用第一人称（如“我”、“我们”），必须使用第三人称（如“他”、“她”、“男子”、“女孩”等）进行客观叙述。
+4. 严格输出一个 JSON 数组（不要包含任何其他 markdown 标记或解释说明），格式如下：
 [
   {
     "hook": "一句话戳中爽点/泪点/好奇心",
-    "intro": "15-25字的简介，讲清冲突与反转",
+    "intro": "30-50字的简介，讲清冲突与反转",
     "tags": "#标签1 #标签2 #标签3"
   }
 ]
@@ -459,88 +468,161 @@ export const generateTopicIdeas = async (categoryName: string, templateName: str
     });
 };
 
-export const generateScriptByScenes = async (topic: string, stylePrompt: string, styleName: string, templateName: string, duration: number, sceneCount: number, aspectRatio: string, model: string = 'gemini-3.1-flash-lite-preview'): Promise<{ title: string; outline: string; content: string }> => {
+export const generateMissingScenePrompt = async (
+    script: string,
+    existingScenes: { script: string; visualPrompt: string }[],
+    stylePrompt: string,
+    model: string = 'gemini-3.1-flash-lite-preview'
+): Promise<string> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+    const prompt = `
+# 任务指令
+分析以下剧本和现有的分镜画面提示词，找出故事中缺失的一个关键转折点或叙事空白，并生成一个详细的画面提示词来补充这个缺失的场景。
+
+# 剧本正文
+${script}
+
+# 现有分镜画面提示词
+${existingScenes.map((s, i) => `分镜 ${i + 1}: 剧本: ${s.script}, 画面: ${s.visualPrompt}`).join('\n')}
+
+# 视觉风格要求
+${stylePrompt}
+
+# 输出要求
+仅输出该缺失场景的详细画面提示词，不需要任何解释。提示词必须包含：画面主体、场景、色彩、构图、视觉风格、视觉风格核心特征、镜头类型。
+`;
+    const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+    });
+    return response.text?.trim() || "";
+};
+
+export const polishScript = async (
+    script: string,
+    model: string = 'gemini-3.1-flash-lite-preview'
+): Promise<string> => {
     return retryOperation(async () => {
         const prompt = `
+# 任务指令
+你是一位专业的动态漫剧本优化专家。请根据以下《动态漫剧本 AI 优化通用设定描述》对提供的剧本进行深度优化。
 
-# 短剧 AI 生成全流程预设提示
+# 优化指南
+1. **整体结构优化**：梳理逻辑，明确“基础信息-分镜-配音-时长”结构。
+2. **分镜优化**：补充视觉细节（镜头角度、色调、光影、画面质感），确保衔接流畅，时长精准，强化画面感染力。特别注意分镜头之间的视觉逻辑连贯性（如角色手中的物品、衣着状态等在前后分镜中应保持一致，不凭空消失）。
+3. **配音文案优化**：口语化、简洁有力，标注语气、语速、重音，确保与画面精准适配。
+4. **文案细节优化**：强化情节紧凑性，统一文案风格，补充必要动作/环境细节。
+5. **适配性优化**：确保描述不复杂、不抽象，直接可用于制作。
 
-## 一、剧本创作核心需求
-### 生成逻辑
-1. **核心锚定**：以用户选择的「故事题材」为叙事基底，结合「创意想法」提炼核心冲突/亮点，将完整故事拆解为「视频数量」个独立且连贯的短视频单元。
-2. **节奏适配**：每个单元严格匹配「单视频时长」，控制台词/动作密度，保证节奏紧凑不拖沓；同时适配「视频比例」，在场景描述中明确竖屏构图重点。
-3. **风格融合**：将「视觉风格」的核心视觉特征融入场景氛围、人物造型和画面细节。
-4. **结构规范**：剧本采用「总起设定 → 分镜列表 → 收尾衔接」的结构，每个分镜对应 1 个短视频，清晰标注场景、人物、首帧起始动作、台词、情绪和风格提示；适配 AI 图生视频，核心动作需为视频首帧的「动作刚发生/正准备发生的起始态」。
+# 优化禁忌
+1. 不偏离原剧本的故事题材、创意主题、核心情节和视觉风格。
+2. 不出现冗余、晦涩表述。
+3. 不破坏原剧本的情绪基调。
+4. 不出现时长分配混乱。
 
-### 输入参数
-- 故事题材：${templateName}
-- 视觉风格：${styleName}
-- 风格附加要求：${stylePrompt}
-- 创意想法：${topic || '请基于“故事题材”自动构思一个极具吸引力、有戏剧冲突的故事'}
-- 单视频时长：${duration}秒/个
-- 视频数量：${sceneCount}个
-- 视频比例：${aspectRatio}（${aspectRatio === '9:16' ? '竖屏' : '横屏'}）
+# 待优化剧本
+${script}
 
-## 二、AI 图生视频-首帧图中文 AI 绘画提示词
-### 生成逻辑
-1. **画面提取**：以剧本中每个分镜的首帧起始动作为核心，提取场景、人物、起始动作、情绪等核心视觉元素，锁定视频动态起点。
-2. **动作时间锚定**：明确动作处于「刚发生/准备发生」的临界状态，避免生成动作已完成画面。使用“即将、刚、准备、尚未”等时间状语强化瞬间感。
-3. **风格强化**：精准融入「视觉风格」的核心视觉特征，仅做静态画面描述，不添加动态效果。
-4. **构图适配**：锚定 1 个核心视觉焦点，避免画面元素杂乱。
-5. **细节补充**：添加光影、色彩、质感等细节，贴合题材氛围。
+# 输出要求
+输出优化后的完整剧本，保持清晰的结构。
+`;
+        if (getActiveApiKey()) {
+            return await callVivaTextAI(prompt, "You are a professional dynamic comic script optimization expert.", false, undefined, model);
+        } else {
+            const ai = getDefaultClient();
+            const response = await ai.models.generateContent({
+                model: model as any,
+                contents: prompt,
+            });
+            return response.text?.trim() || "";
+        }
+    });
+};
 
-## 三、AI 图生视频-中文 AI 视频提示词
-### 生成逻辑
-1. **动态扩展**：以首帧图为动态起点，自然延续为动态视频指令。视频提示词可以包含多个画面场景的切换描述，不一定只是首帧画面的单一延续。
-2. **镜头语言与拍摄手法**：明确镜头运动（如推镜、拉镜、固定镜头、环绕镜头、航拍等）、转场方式、以及多种拍摄手法（如特写、中景、远景切换，快动作、慢动作等）。
-3. **风格动态化**：将「视觉风格」转化为动态效果。
-4. **氛围营造**：添加音效/氛围音提示。
-5. **全局统一参数强制引用**：所有视频片段必须遵守预设的「全局统一参数」（背景音、音效），保证多片段间的听觉与风格一致性。
-6. **禁止人声**：生成视频中的人物禁止说话及有旁白说话声音产出，因为人物说话需要单独配音。视频提示词中不要包含任何关于人物说话、台词或旁白的描述。
-7. **时长适配**：严格匹配「单视频时长」的节奏控制。
+export const optimizeScript = async (
+    script: string,
+    model: string = 'gemini-3.1-flash-lite-preview'
+): Promise<string> => {
+    return retryOperation(async () => {
+        const prompt = `
+请帮我优化这篇短剧剧本，要求：
+1. **仅优化“分镜”和“配音”部分**。保持原有的“故事题材”、“视觉风格”、“剧本名称”、“剧本集数”、“单集时长”、“画面比例”等元数据完全不变。
+2. 修补所有逻辑漏洞，让分镜衔接自然，角色行为合理、动机清晰、不突兀。
+3. **视觉连贯性要求**：确保分镜头之间的视觉逻辑前后一致。例如：若角色在前一分镜中持有物品（如早餐、手机等），在逻辑上该物品应继续出现的后续分镜中必须明确描述，严禁物品凭空消失。
+4. 强化故事题材氛围，节奏紧凑。
+5. **配音格式要求**：必须严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。**务必完整保留剧本中的（语气标注 / 语气提示 / 节奏提示），严禁删除括号内的任何内容。**
+6. 配音文案更口语、更有画面感、情绪递进自然，不重复、不啰嗦。**如果原剧本中有明确的语气标注（如：(惊讶地)、(低声地)等），必须在优化后的配音中予以保留或根据语境合理强化。**
 
-## 四、AI 配音（语音）提示词生成逻辑与输入要求
-### 生成逻辑
-1. **剧本提取**：以剧本分镜中的「人物」「台词」「情绪氛围」为核心，锁定每句台词的演绎基调。
-2. **情感细化**：结合剧情上下文，明确每句台词的具体情感（如紧张、窃喜、愤怒、疲惫）及情绪变化（如从平静到激动）。
-3. **语速与节奏控制**：根据台词内容、人物性格及剧情张力，设定语速（快/中/慢）、停顿位置、重音强调等细节。
-4. **风格与语气**：参考剧本内容加入合适的控制风格、语气、口音、节奏、语速等词。
-5. **纯净人声**：音频只会生成人物说话声音，不会生成什么“轻快且略带搞笑的背景音乐高潮、伴随着清脆的键盘敲击声和成功提交的系统提示音、急促的时钟滴答声、快递员发出夸张的憋气声音“等之类的音效。
-6. **台词字数控制**：角色的台词数量必须严格考虑剧本的单视频时长（${duration}秒）。正常语速约为每秒4-5个字，请确保生成的台词字数在合理范围内，避免台词过长导致音频超出视频时长。
+待优化剧本：
+${script}
 
-### 示例参考
-音频提示词的内容必须严格区分角色，格式为“[角色名]：(风格/语气/口音/节奏/语速)台词内容”。
-1. 单人发言：[小明]：(带着酒后的冲动与意识模糊，慢吞吞地语速)老板那发型，其实我也觉得像……像那个还没熟透的柚子。
-2. 多位发言：[小明]：(疲惫且沙哑)那么……今天有什么安排？[旁白]：(低沉且富有磁性，语速平缓)他并不知道，危险正在靠近。[小红]：(兴奋且尖锐，语速极快)你绝对猜不到，我会给你一个惊喜！
-3. **旁白与内心独白的严格区分（极其重要）**：
-   - 如果是**第三人称的客观叙述者**（不属于故事中的具体角色），请标注为 \`[旁白]\`。
-   - 如果是**角色自己的内心独白**、回忆或自我叙述，**必须标注为该角色的名字**，例如 \`[小明(内心独白)]\`。**绝对不能**将角色的内心独白标注为 \`[旁白]\`，否则会导致配音时性别或音色错乱！
+只输出优化后的完整剧本，不要额外解释。
+`;
+        if (getActiveApiKey()) {
+            return await callVivaTextAI(prompt, "Script Optimizer", false, undefined, model);
+        } else {
+            const executeCall = async (currentModel: string) => {
+                const ai = getDefaultClient();
+                const response = await ai.models.generateContent({
+                    model: currentModel as any,
+                    contents: prompt,
+                });
+                return response.text?.trim() || "";
+            };
 
-## 五、全局统一参数预设生成
-请根据题材，生成一套完整的全局统一参数预设，包含：
-- 配音全局统一参数（主角、配角、旁白音色，音量平衡，语言等）
-- 背景环境音统一设定（主场景、转场场景、音量）
-- 音效统一设定（动作音效、情绪音效、响应速度）
+            try {
+                return await executeCall(model);
+            } catch (e) {
+                console.warn(`Default text model ${model} failed for optimization, trying fallback...`, e);
+                const otherModels = ['gemini-3.1-flash-lite-preview', 'gemini-3-flash-preview', 'gemini-3-pro-preview'].filter(m => m !== model);
+                for (const fallbackModel of otherModels) {
+                    try {
+                        return await executeCall(fallbackModel);
+                    } catch (err) {
+                        console.warn(`Fallback ${fallbackModel} failed.`);
+                    }
+                }
+                throw e;
+            }
+        }
+    });
+};
 
-## 六、输出格式
-请严格输出一个 JSON 对象（不要包含任何其他 markdown 标记或解释说明），格式如下：
+export const generateAllEpisodes = async (topic: string, stylePrompt: string, styleName: string, templateName: string, duration: string, episodeCount: number, sceneCount: number, aspectRatio: string, model: string = 'gemini-3.1-flash-lite-preview'): Promise<{ episodes: { title: string; content: string }[] }> => {
+    return retryOperation(async () => {
+        const prompt = `
+# 任务指令
+请根据以下核心参数，生成 ${episodeCount} 集连贯的故事/剧本。
+内容紧扣创意主题，语言适配演讲节奏。
+剧本正文必须完全以“讲故事人（旁白）”的第三人称客观视角进行故事的叙述。
+请确保各集之间情节连贯，故事发展有逻辑。
+
+# 核心要求（非常重要）
+1. **命名一致性**：在所有分镜和剧本中，相同的角色和场景必须使用完全一致的名称。例如：如果角色叫“小明”，则不能在其他地方称呼他为“他”或“男孩”；如果场景是“卧室”，则不能称呼为“卧房”。这些名称将直接作为绘图提示词。
+2. **故事分布**：请将整个故事合理地分布在 ${episodeCount} 集中。严禁在第 1 集就讲完整个故事。每一集都应该是故事的一个阶段，确保剧情的连贯性和悬念。
+
+# 核心参数
+1. 故事题材：${templateName}
+2. 视觉风格：${styleName}
+3. 创意主题：${topic || '自动构思'}
+4. 单集时长：${duration}
+5. 总集数：${episodeCount}
+6. 画面比例：${aspectRatio}
+
+# 生成要求
+1. 分镜：每集必须生成 ${sceneCount} 个分镜，以适配 ${duration} 的时长。确保镜头切换频繁（平均每 2-3 秒一个镜头），避免单张画面停留过久，增强动态漫的视觉观感。
+2. 节奏：每集的最后个镜头及配音留悬念
+3. 配音：口语化，情绪饱满，台词对应动作帧，方便剪辑，无冗余语句，贴合短视频传播。**务必严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。** 务必精简配音内容，确保每段配音能在 2-3 秒内读完，以匹配高频率的镜头切换。
+
+# 输出要求
+请严格按照以下 JSON 格式输出，不要包含任何其他 markdown 标记或解释说明：
 {
-  "global_params": {
-    "voice_setting": "...",
-    "background_audio": "...",
-    "sound_effects": "..."
-  },
-  "scenes": [
+  "episodes": [
     {
-      "scene_number": 1,
-      "scene_name": "场景名称",
-      "character": "人物",
-      "start_action": "首帧起始动作",
-      "visual_description": "画面描述",
-      "visual_prompt": "中文AI绘画提示词",
-      "video_prompt": "中文AI视频提示词",
-      "audio_prompt": "角色音色设定 + 情绪语气 + 台词/旁白 + 语速/停顿/重音等细节"
-    }
+      "title": "第1集标题",
+      "content": "故事题材：[题材]\\n视觉风格：${styleName}（核心视觉特征）\\n剧本名称：[名称]\\n剧本集数：第 1 集\\n单集时长：${duration}\\n画面比例：${aspectRatio}\\n--- 分镜&配音：\\n分镜 1：镜头与视角 + 构图 + 光影 + 色彩 + 主体环境 + 质感 + 氛围+核心视觉特征\\n配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容\\n分镜 2：镜头与视角 + 构图 + 光影 + 色彩 + 主体环境 + 质感 + 氛围+核心视觉特征\\n配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容\\n..."
+    },
+    ...
   ]
 }
 `;
@@ -552,132 +634,150 @@ export const generateScriptByScenes = async (topic: string, stylePrompt: string,
             const response = await ai.models.generateContent({
                 model: model as any,
                 contents: prompt,
-                config: { responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 4096 } }
+                config: { responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 2048 } }
             });
             jsonStr = response.text || "{}";
         }
 
-        let result: any;
         try {
-            result = JSON.parse(cleanJson(jsonStr));
+            const result = JSON.parse(cleanJson(jsonStr));
+            return result;
         } catch (e) {
-            console.error("Failed to parse script JSON", e);
-            throw new Error("Failed to generate valid script JSON.");
+            console.error("Failed to parse multi-episode script", e);
+            throw new Error("Failed to generate multi-episode script");
         }
+    });
+};
 
-        const scenes = result.scenes || [];
-        const globalParams = result.global_params || {};
+export const generateScriptByScenes = async (topic: string, stylePrompt: string, styleName: string, templateName: string, duration: string, episodeCount: number, currentEpisode: number, sceneCount: number, aspectRatio: string, model: string = 'gemini-3.1-flash-lite-preview'): Promise<{ title: string; outline: string; content: string }> => {
+    return retryOperation(async () => {
+        const prompt = `
+# 任务指令
+请根据以下核心参数，生成一篇适配“关键镜头分镜图+专家级配音”的完整故事/剧本。
+内容紧扣创意主题，语言适配演讲节奏。
+剧本正文必须完全以“讲故事人（旁白）”的第三人称客观视角进行故事的叙述。
 
-        // Format as structured text for the editor using Chinese labels
-        let contentText = "";
-        contentText += `人声设定: ${globalParams.voice_setting || ''}\n`;
-        contentText += `背景环境音: ${globalParams.background_audio || ''}\n`;
-        contentText += `音效设定: ${globalParams.sound_effects || ''}\n\n`;
+# 核心要求（非常重要）
+1. **命名一致性**：在所有分镜和剧本中，相同的角色和场景必须使用完全一致的名称。例如：如果角色叫“小明”，则不能在其他地方称呼他为“他”或“男孩”；如果场景是“卧室”，则不能称呼为“卧房”。这些名称将直接作为绘图提示词。
 
-        const globalParamsText = contentText;
+# 核心参数
+1. 故事题材：${templateName}
+2. 视觉风格：${styleName}
+3. 创意主题：${topic || '自动构思'}
+4. 单集时长：${duration}
+5. 当前生成集数：第 ${currentEpisode} 集
+6. 画面比例：${aspectRatio}
 
-        if (Array.isArray(scenes)) {
-            scenes.forEach((scene: any) => {
-                contentText += `[视频 ${scene.scene_number}]\n`;
-                contentText += `场景名称: ${scene.scene_name || ''}\n`;
-                contentText += `角色名称: ${scene.character || ''}\n`;
-                contentText += `画面描述: ${scene.visual_description || ''}\n`;
-                contentText += `绘画提示词: ${scene.visual_prompt || ''}\n`;
-                contentText += `视频提示词: ${scene.video_prompt || ''}\n`;
-                contentText += `音频提示词: ${scene.audio_prompt || ''}\n\n`;
+# 生成要求
+1. 分镜：本集必须生成 ${sceneCount} 个分镜，以适配 ${duration} 的时长。确保镜头切换频繁（平均每 2-3 秒一个镜头），避免单张画面停留过久，增强动态漫的视觉观感。
+2. 节奏：每集的最后个镜头及配音留悬念
+3. 配音：口语化，情绪饱满，台词对应动作帧，方便剪辑，无冗余语句，贴合短视频传播。**务必严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。** 务必精简配音内容，确保每段配音能在 2-3 秒内读完，以匹配高频率的镜头切换。
+
+# 输出格式要求
+请严格按照以下格式输出：
+
+故事题材：[填入题材]
+视觉风格：${styleName}（核心视觉特征）
+剧本名称：[填入名称]
+剧本集数：第 ${currentEpisode} 集
+单集时长：${duration}
+画面比例：${aspectRatio}
+--- 分镜&配音：
+分镜 1：镜头与视角 + 构图 + 光影 + 色彩 + 主体环境 + 质感 + 氛围+核心视觉特征
+配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容
+分镜 2：镜头与视角 + 构图 + 光影 + 色彩 + 主体环境 + 质感 + 氛围+核心视觉特征
+配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容
+...
+`;
+        let textStr = "";
+        if (getActiveApiKey()) {
+            textStr = await callVivaTextAI(prompt, "Professional Director", false, undefined, model);
+        } else {
+            const ai = getDefaultClient();
+            const response = await ai.models.generateContent({
+                model: model as any,
+                contents: prompt,
+                config: { thinkingConfig: { thinkingBudget: 2048 } }
             });
+            textStr = response.text || "";
         }
 
         return {
             title: topic || templateName,
             outline: `${sceneCount} scenes about ${topic || templateName}`,
-            content: contentText
+            content: textStr
         };
     });
 };
 
-export const generateScript = async (finalScriptText: string, styleModifier: string, characters?: string[], topic?: string): Promise<Scene[]> => {
+
+export const generateScript = async (finalScriptText: string, styleModifier: string, characters?: string[], topic?: string): Promise<{ scenes: Scene[], narration: string }> => {
   return retryOperation(async () => {
     const charList = characters && characters.length > 0 ? `\n    Core Characters to use: ${characters.join(', ')}` : '';
     const topicInfo = topic ? `\n    Creative Idea (创意想法): ${topic}` : '';
     const prompt = `
-    Task: Parse the provided storyboard script text into a structured JSON list.${charList}${topicInfo}
+    Task: Parse the provided storyboard script text into a structured JSON object.${charList}${topicInfo}
     Script Source:
     "${finalScriptText}"
     
     Instructions:
-    - The script is formatted with [视频 X] headers.
-    - Extract fields from labels: 场景名称, 角色名称, 画面描述, 绘画提示词, 视频提示词, 音频提示词.
-    - Map to the output JSON structure below.
-    - 'visualPrompt' = 绘画提示词 (Ensure this describes a SINGLE moment in time)
-    - 'script' = (If Creative Idea is provided, prepend it: "创意想法: " + Creative Idea + "\\n\\n") + 场景名称 + "\\n" + 画面描述 + "\\n" + 音频提示词
-    - 'videoPrompt' = 视频提示词 + "\\n" + (Global 背景环境音) + "\\n" + (Global 音效设定) (CRITICAL: Ensure actions in the videoPrompt are explicitly assigned to specific character names. DO NOT include any dialogue or audio prompts, characters should NOT speak.)
-    - 'cameraPrompt' = 从“视频提示词”中提取出的镜头语言（如：特写、中景、推镜等），不要包含多镜头描述。
-    - 'character' = 角色名称 (Try to match with Core Characters if provided)
-    - 'globalParams' = 全局统一参数预设 (The section before [视频 1])
-    - CRITICAL: If '音频提示词' (Audio Prompt) contains dialogue between multiple characters (e.g., "角色1: ... 角色2: ...") or a narrator and a character, you MUST split them into separate entries in the 'audios' array.
+    - The script is formatted with sections like "分镜 1：..." and "配音：...".
+    - Extract the scenes from the "分镜&配音" section. Each "分镜 X" is a scene.
+    - 'visualPrompt' = The full description of the keyframe (镜头与视角, 构图, 光影, 色彩, 主体环境, 质感, 氛围, 核心视觉特征).
+    - 'cameraPrompt' = Extract the "镜头与视角" (Camera type/angle) from the keyframe description.
+    - 'script' = The keyframe description.
+    - 'videoPrompt' = The keyframe description adapted for video generation.
+    - 'audios' = Extract the corresponding voiceover line from the "配音：" section that matches this scene.
     - Each entry in 'audios' must have a 'name' and a 'prompt'.
-    - 'prompt' should include the style, tone, accent, rhythm, speed, emotion and the actual dialogue for THAT character, formatted as "(Description) Dialogue".
-    - CRITICAL DISTINCTION FOR VOICE-OVERS (旁白): 
-      * If the voice-over is a third-person narrator (not a character in the story), label the name as "旁白" (Narrator).
-      * If the voice-over is actually a character's INNER MONOLOGUE (内心独白) or their own voice narrating their story, you MUST use THAT CHARACTER'S NAME (e.g., "John (内心独白)"). DO NOT use "旁白" if it's the character's own thoughts. This ensures the gender and voice match the character.
-    - If fields are missing, infer them from context.
+    - 'prompt' MUST include the voice acting instructions (e.g., "(语气/节奏/重音等...)") and the actual dialogue. DO NOT strip out the parentheses or the instructions within them.
+    - 'name' should be "旁白" (Narrator) if it's a general voiceover, or the character's name if it's a specific character speaking.
+    - 'narration' = Combine all the "配音：" sections into one full narration text, keeping all the voice acting instructions (e.g., "(语气/节奏/重音等...)") exactly as they appear in the source script.
     
-    Return JSON Array:
-    [
-      { 
-        "sceneNumber": number, 
-        "script": "Chinese description and audio prompt...", 
-        "visualPrompt": "Chinese visual prompt...", 
-        "videoPrompt": "Chinese video prompt...",
-        "cameraPrompt": "Camera action...",
-        "audios": [
-          { "name": "Character Name", "prompt": "Audio prompt for this character..." }
-        ],
-        "character": "Main character name",
-        "globalParams": "..."
-      },
-      ...
-    ]
+    Return JSON Object:
+    {
+      "scenes": [
+        { 
+          "sceneNumber": number, 
+          "script": "Chinese description...", 
+          "visualPrompt": "Chinese visual prompt...", 
+          "videoPrompt": "Chinese video prompt...",
+          "cameraPrompt": "Camera action...",
+          "audios": [
+            { "name": "Character Name or 旁白", "prompt": "(语气标注) 剧本内容..." }
+          ],
+          "character": "Main character name",
+          "globalParams": "..."
+        }
+      ],
+      "narration": "(语气标注) 剧本内容 1... (语气标注) 剧本内容 2..."
+    }
     `;
+    
+    let scenes: any[] = [];
+    let narration = "";
+
     if (getActiveApiKey()) {
         const text = await callVivaTextAI(prompt, "Script Parser", true);
-        const parsed = JSON.parse(cleanJson(text)) as any[];
-        return parsed.map(p => {
-            let audios = p.audios && Array.isArray(p.audios) ? p.audios.map((a: any, idx: number) => ({
-                name: a.name || (idx === 0 ? (p.character || '角色 A') : '角色 B'),
-                prompt: a.prompt || '',
-                voice: a.name === '旁白' ? 'Schedar' : (idx === 0 ? 'Kore' : 'Puck')
-            })) : [];
-
-            if (audios.length === 0) {
-                // Fallback if model didn't return audios array
-                audios = [
-                    { prompt: p.audioPrompt || '', voice: 'Kore', name: p.character || (characters?.[0] || '角色 A') },
-                    { prompt: '', voice: 'Puck', name: characters?.[1] || '角色 B' }
-                ];
-            }
-            
-            // Ensure at least 2 slots for UI consistency
-            if (audios.length === 1) {
-                audios.push({ prompt: '', voice: 'Puck', name: characters?.[1] || '角色 B' });
-            }
-
-            return { ...p, audios };
-        }) as Scene[];
+        const parsedObj = JSON.parse(cleanJson(text));
+        scenes = Array.isArray(parsedObj.scenes) ? parsedObj.scenes : (Array.isArray(parsedObj) ? parsedObj : []);
+        narration = parsedObj.narration || "";
+    } else {
+        const ai = getDefaultClient();
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.1-flash-lite-preview',
+          contents: prompt,
+          config: { responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 2048 } }
+        });
+        const parsedObj = JSON.parse(cleanJson(response.text || "{}"));
+        scenes = Array.isArray(parsedObj.scenes) ? parsedObj.scenes : (Array.isArray(parsedObj) ? parsedObj : []);
+        narration = parsedObj.narration || "";
     }
-    const ai = getDefaultClient();
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-lite-preview',
-      contents: prompt,
-      config: { responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 2048 } }
-    });
-    const parsed = JSON.parse(cleanJson(response.text || "[]")) as any[];
-    return parsed.map(p => {
+
+    const processedScenes = scenes.map(p => {
         let audios = p.audios && Array.isArray(p.audios) ? p.audios.map((a: any, idx: number) => ({
             name: a.name || (idx === 0 ? (p.character || '角色 A') : '角色 B'),
             prompt: a.prompt || '',
-            voice: idx === 0 ? 'Kore' : 'Puck'
+            voice: a.name === '旁白' ? 'Schedar' : (idx === 0 ? 'Kore' : 'Puck')
         })) : [];
 
         if (audios.length === 0) {
@@ -691,6 +791,8 @@ export const generateScript = async (finalScriptText: string, styleModifier: str
 
         return { ...p, audios };
     }) as Scene[];
+
+    return { scenes: processedScenes, narration };
   });
 };
 
@@ -700,11 +802,13 @@ export const generateAssetImage = async (
     styleModifier: string,
     aspectRatio: '9:16' | '16:9' = '16:9',
     description?: string, // Derived from script
-    model: string = 'gemini-3.1-flash-image-preview'
+    model: string = 'gemini-3.1-flash-image-preview',
+    referenceImages?: Array<{ data: string; mimeType: string }>
 ): Promise<string> => {
     return retryOperation(async () => {
         let specificPrompt = "";
         const descText = description ? `Visual Details: ${description}` : "";
+        const parts: any[] = [];
 
         if (type === 'character') {
             const identityHint = (name === '我' || name === '主角' || name === '女主' || name === '男主') 
@@ -712,27 +816,46 @@ export const generateAssetImage = async (
                 : "";
             
             specificPrompt = `
-            Task: Create full-body image of "${name}" on PURE WHITE BACKGROUND (#FFFFFF).
+            Task: Create a Character Sheet (Three-View) of "${name}" on PURE WHITE BACKGROUND (#FFFFFF).
+            Prompt: 角色三视图，人物站立，双手自然下垂，严格固定布局。
+            Layout:
+            - Left: Front view, standing. (左侧：角色正视图，正面站立)
+            - Middle: Side view, standing. (中间：角色侧视图，侧面站立)
+            - Right: Back view, standing. (右侧：角色背视图，背面站立)
+            Horizontal alignment. Same character, same clothes, same hairstyle, same height, same scale.
+            Unified design, consistent face, consistent colors.
             ${identityHint}
             STYLE: ${styleModifier}. Apply this style ONLY to the character's appearance, clothing, and textures.
             ${descText}
-            POSTURE: If human, stand upright. If ANIMAL or NON-HUMAN, use its NATURAL POSTURE.
             CRITICAL: The background must be 100% pure white, no shadows, no floor, no environment. 
             NO TEXT, NO SUBTITLES, NO CAPTIONS, NO WATERMARKS, NO LETTERS on the image.
+            Purpose: Storyboard setting. High Definition. Consistent details.
             `;
         } else {
             // Match user's requested format: Location + Core visual features
-            // Remove the "核心视觉特征：" prefix for a cleaner prompt
             const cleanStyle = styleModifier.replace(/核心视觉特征[：:]\s*/g, '');
             specificPrompt = `
             Task: Environment Concept Art.
             Prompt: ${name}，${cleanStyle}。
+            Analysis: 分析剧本，理解出场景应该展示物理空间范围，景别范围，时间与氛围范围，叙事焦点范围。
             ${descText}
             Pure Scenery. NO PEOPLE.
+            ${referenceImages && referenceImages.length > 0 ? `CRITICAL: This is a specific element or area from the provided reference images. 
+            - If the reference image is a larger scene (e.g., a "Bedroom") and you are generating a sub-element (e.g., a "Bedside table"), you MUST find that exact element within the reference image and replicate its appearance (style, color, material, design) perfectly.
+            - Ensure the visual style, colors, and details are EXACTLY consistent with how "${name}" appears in the reference images.` : ""}
             `;
         }
+
+        if (referenceImages) {
+            referenceImages.forEach(img => {
+                parts.push({ inline_data: { mime_type: img.mimeType, data: img.data } });
+            });
+        }
+
         const prompt = `Design a ${type}. ${specificPrompt} Aspect Ratio: ${aspectRatio}.`;
-        return await callVivaImageGen([{ text: prompt }], aspectRatio, model);
+        parts.push({ text: prompt });
+
+        return await callVivaImageGen(parts, aspectRatio, model);
     });
 };
 
@@ -743,7 +866,8 @@ export const generateSceneImage = async (
   coreScenes: AssetItem[],
   aspectRatio: '9:16' | '16:9' = '16:9',
   sceneReferenceImages?: Array<{ data: string; mimeType: string } | undefined>,
-  model: string = 'gemini-3.1-flash-image-preview'
+  model: string = 'gemini-3.1-flash-image-preview',
+  styleModifier: string = ''
 ): Promise<string> => {
     const parts: any[] = [];
     // Constructed prompt handling Chinese visualPrompt gracefully
@@ -751,6 +875,7 @@ export const generateSceneImage = async (
     Main Subject & Action: "${visualPrompt}". 
     Shot Type & Camera Angle: "${cameraPrompt}". 
     Aspect Ratio: ${aspectRatio}.
+    Style & Aesthetic: ${styleModifier || 'Cinematic, high quality'}.
     
     CRITICAL RULES:
     - Generate ONLY ONE single image frame. 
@@ -758,11 +883,37 @@ export const generateSceneImage = async (
     - NO split screens.
     - NO text, captions, or watermarks.
     - Focus on the STARTING state of the scene.
-    - Use the provided reference images for character and location consistency.`;
+    - Use the provided reference images for character and location consistency.
+    - **Spatial Integration**: Ensure characters are naturally integrated into the environment. They should interact with the lighting, shadows, and physical elements of the scene.
+    - **Perspective Consistency**: The perspective and vanishing points of the characters MUST match the perspective of the background scene perfectly.
+    - **Realistic Proportions**: Maintain accurate real-world scale and proportions between characters and their surroundings. No distorted or impossible sizes.`;
     
     const addImagePart = (data: string, mimeType: string) => { parts.push({ inline_data: { mime_type: mimeType, data: data } }); };
-    characters.forEach(c => { if (c.data && c.autoReference !== false) { addImagePart(c.data, c.mimeType); promptInstructions += `\n- Reference Character [${c.name}]: Use this exact character appearance.`; } });
-    coreScenes.forEach(s => { if (s.data && s.autoReference !== false) { addImagePart(s.data, s.mimeType); promptInstructions += `\n- Reference Location [${s.name}]: Use this exact environment style/setting.`; } });
+    
+    if (characters.length > 0) {
+        promptInstructions += `\n\n[Character References]`;
+        characters.forEach(c => { 
+            let charDesc = `\n- Character [${c.name}]: ${c.description || 'No description provided.'}`;
+            if (c.data && c.autoReference !== false) { 
+                addImagePart(c.data, c.mimeType); 
+                charDesc += ` (Use the provided reference image for exact appearance).`; 
+            }
+            promptInstructions += charDesc;
+        });
+    }
+
+    if (coreScenes.length > 0) {
+        promptInstructions += `\n\n[Location References]`;
+        coreScenes.forEach(s => { 
+            let sceneDesc = `\n- Location [${s.name}]: ${s.description || 'No description provided.'}`;
+            if (s.data && s.autoReference !== false) { 
+                addImagePart(s.data, s.mimeType); 
+                sceneDesc += ` (Use the provided reference image for exact environment style).`; 
+            }
+            promptInstructions += sceneDesc;
+        });
+    }
+
     if (sceneReferenceImages) sceneReferenceImages.forEach(img => { if (img?.data) { addImagePart(img.data, img.mimeType); promptInstructions += ` [Ref Composition]`; } });
     parts.push({ text: promptInstructions });
     return retryOperation(async () => await callVivaImageGen(parts, aspectRatio, model));
@@ -777,7 +928,15 @@ export const editSceneImage = async (imageBytes: string, instruction: string, as
 
 export const generateAudio = async (
     prompt: string,
-    voiceConfig: { voiceName?: string; multiSpeakerVoiceConfig?: { speakerVoiceConfigs: { speaker: string; voiceName: string }[] } },
+    voiceConfig: { 
+        voiceName?: string; 
+        multiSpeakerVoiceConfig?: { speakerVoiceConfigs: { speaker: string; voiceName: string }[] };
+        style?: string;
+        tone?: string;
+        accent?: string;
+        rhythm?: string;
+        speed?: string;
+    },
     model: string = 'gemini-2.5-flash-preview-tts',
     duration?: number
 ): Promise<string> => {
@@ -810,6 +969,17 @@ export const generateAudio = async (
         let finalPrompt = voiceConfig.multiSpeakerVoiceConfig 
             ? `TTS the following conversation:\n${prompt}`
             : prompt;
+        
+        if (voiceConfig.style || voiceConfig.tone || voiceConfig.accent || voiceConfig.rhythm || voiceConfig.speed) {
+            const controls = [
+                voiceConfig.style && `风格：${voiceConfig.style}`,
+                voiceConfig.tone && `语气：${voiceConfig.tone}`,
+                voiceConfig.accent && `口音：${voiceConfig.accent}`,
+                voiceConfig.rhythm && `节奏：${voiceConfig.rhythm}`,
+                voiceConfig.speed && `语速：${voiceConfig.speed}`,
+            ].filter(Boolean).join('，');
+            finalPrompt = `[${controls}]\n${finalPrompt}`;
+        }
         
         if (duration) {
             finalPrompt += `\n\nIMPORTANT: The audio must fit within approximately ${duration} seconds.`;
@@ -856,7 +1026,6 @@ export const generateAudio = async (
 
 
 export const generateVideo = async (
-
   imageBytes: string,
   prompt: string,
   aspectRatio: '9:16' | '16:9',
@@ -864,7 +1033,7 @@ export const generateVideo = async (
   signal?: AbortSignal,
   model: VideoModel = 'sora-2-all'
 ): Promise<string> => {
-    let finalPrompt = prompt;
+    let finalPrompt = `The input image is a 3-panel storyboard. Please ignore the borders and treat the 3 panels as consecutive keyframes (start, middle, end) for the video. Generate a smooth, continuous video that follows this sequence. ${prompt}`;
     if (!prompt.toLowerCase().includes('language')) finalPrompt += ", speaking language: Chinese (Mandarin)";
     const activeKey = getActiveApiKey();
     if (activeKey) {
@@ -878,12 +1047,14 @@ export const generateVideo = async (
                     if (aspectRatio === '16:9') grokAspectRatio = '3:2';
                     if (aspectRatio === '9:16') grokAspectRatio = '2:3';
 
+                    const images = [`data:image/png;base64,${imageBytes}`];
+
                     const body = {
                         model: model,
                         prompt: finalPrompt + " --mode=custom",
                         aspect_ratio: grokAspectRatio,
                         size: model === 'grok-video-3-15s' ? "1080P" : "720P",
-                        images: [`data:image/png;base64,${imageBytes}`]
+                        images: images
                     };
 
                     const createResp = await fetch(`${vivaBaseUrl}/v1/video/create`, {
@@ -940,6 +1111,7 @@ export const generateVideo = async (
                     formData.append('prompt', finalPrompt);
                     formData.append('seconds', duration.toString()); 
                     formData.append('size', aspectRatio === '16:9' ? '16x9' : '9x16'); 
+                    
                     const blob = await (await fetch(`data:image/png;base64,${imageBytes}`)).blob();
                     formData.append('input_reference', blob, 'image.png');
                     const createResp = await fetch(`${vivaBaseUrl}/v1/videos`, {
@@ -997,14 +1169,20 @@ export const generateVideo = async (
         googleModel = model; 
     }
 
+    const referenceImages: any[] = [];
+    referenceImages.push({
+        image: { imageBytes: imageBytes, mimeType: 'image/png' },
+        referenceType: 'ASSET'
+    });
+
     let operation = await ai.models.generateVideos({
         model: googleModel as any,
         prompt: finalPrompt,
-        image: { imageBytes: imageBytes, mimeType: 'image/png' },
         config: { 
             numberOfVideos: 1, 
             resolution: model.includes('grok-video-3') ? '1080p' : '720p', 
-            aspectRatio: aspectRatio 
+            aspectRatio: aspectRatio,
+            referenceImages: referenceImages
         }
     });
     

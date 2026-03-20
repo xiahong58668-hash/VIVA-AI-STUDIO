@@ -22,8 +22,16 @@ export interface AudioItem {
   error?: string;
 }
 
+export interface Keyframe {
+  prompt: string;
+  imageUrl?: string;
+  isGenerating?: boolean;
+  error?: string;
+}
+
 export interface Scene {
   sceneNumber: number;
+  episodeNumber?: number;
   script: string;
   visualPrompt: string;
   visualPromptZh?: string; // Chinese visual prompt
@@ -49,6 +57,7 @@ export interface Scene {
   error?: string; // Error message for individual scene generation failure
   dialogue?: string; // Added dialogue/narration
   globalParams?: string; // Added global parameters
+  keyframes?: Keyframe[]; // Exactly 3 keyframes for 3-panel storyboard
   // Changed from single object to array of objects (max 3)
   sceneReferenceImages?: Array<{
     data: string;
@@ -102,4 +111,21 @@ export interface ScriptOption {
   title: string;
   outline: string;
   content: string;
+}
+
+export interface SeriesContext {
+  isSeries: boolean;
+  totalEpisodes: number;
+  currentEpisode: number;
+  seriesOutline: string;
+  previousSummaries: string[];
+}
+
+export interface PastEpisode {
+  episodeNumber: number;
+  scenes: Scene[];
+  globalNarration: string;
+  globalAudioUrl?: string;
+  draftScript: string;
+  summary: string;
 }

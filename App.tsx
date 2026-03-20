@@ -4,15 +4,16 @@ import React, { useState, useRef, useEffect } from 'react';
 import { get, set } from 'idb-keyval';
 import { AppStep, Scene, StyleOption, AssetItem, ScriptCategory, ScriptTemplate, ScriptOption, VideoModel } from './types';
 import { STYLES, SCRIPT_CATEGORIES, getValidDurations } from './constants';
-import { generateScript, generateSceneImage, extractAssetsFromScript, setCustomConfig, testApiConnection, generateAssetImage, generateTopicIdeas, generateScriptByScenes, generateVideo, editSceneImage, generateAudio } from './services/geminiService';
+import { generateScript, generateSceneImage, extractAssetsFromScript, setCustomConfig, testApiConnection, generateAssetImage, generateTopicIdeas, generateScriptByScenes, generateAllEpisodes, generateVideo, editSceneImage, generateAudio, generateMissingScenePrompt } from './services/geminiService';
 import StepIndicator from './components/StepIndicator';
 import StoryboardGrid from './components/StoryboardGrid';
 import ScriptEditor from './components/ScriptEditor';
 import LoadingOverlay from './components/LoadingOverlay';
+import VideoPreview from './components/VideoPreview';
 import PricingModal from './components/PricingModal';
-import { Sparkles, AlertCircle, Upload, User, Trash2, Plus, Settings, CheckCircle2, XCircle, Wifi, Clapperboard, BookOpen, Camera, ArrowRight, RefreshCw, MapPin, Wand2, Clock, Maximize2, Download, Monitor, ChevronRight, PenTool, ShoppingBag, Brain, MessageCircleQuestion, BadgeDollarSign, History, ExternalLink, AlertTriangle, FileText, Database, DollarSign, Loader2, Image, Zap, Link2, Film, Bot, X, Eye, EyeOff, Save, Copy, Music } from 'lucide-react';
+import { Sparkles, AlertCircle, Upload, User, Trash2, Plus, Settings, Check, XCircle, Wifi, Clapperboard, BookOpen, Camera, ArrowRight, RefreshCw, MapPin, Wand2, Clock, Maximize2, Download, Monitor, ChevronRight, ChevronDown, PenTool, ShoppingBag, Brain, MessageCircleQuestion, BadgeDollarSign, History, ExternalLink, AlertTriangle, FileText, Database, DollarSign, Loader2, Image, Zap, Link2, Film, Bot, X, Eye, EyeOff, Save, Copy, Music } from 'lucide-react';
 import { clsx } from 'clsx';
-import { agentConfig } from './agentConfig';
+import { proxyConfig as agentConfig } from './src/proxyConfig';
 
 // Helper for concurrency
 async function runConcurrent<T>(
@@ -79,7 +80,7 @@ const AssetSlot: React.FC<AssetSlotProps> = ({
         {isGenerating && (
             <div className="absolute inset-0 z-30 bg-gray-600/50 flex flex-col items-center justify-center backdrop-blur-sm">
                 <Loader2 className="animate-spin text-[#FACC15] w-10 h-10 mb-3" strokeWidth={3} />
-                <span className="font-bangers text-white text-lg tracking-widest animate-pulse drop-shadow-md">CREATING...</span>
+                <span className="font-bangers text-white text-lg tracking-widest animate-pulse">CREATING...</span>
             </div>
         )}
 
@@ -116,10 +117,10 @@ const AssetSlot: React.FC<AssetSlotProps> = ({
              {error ? (
                 <div className="text-center w-full">
                     <AlertCircle className="text-red-500 mx-auto mb-2" size={32} />
-                    <p className="text-[10px] text-red-600 font-bold mb-2 leading-tight max-h-12 overflow-hidden break-words">{error.length > 50 ? error.substring(0,50) + '...' : error}</p>
+                    <p className="text-[10px] text-red-600 font-normal mb-2 leading-tight max-h-12 overflow-hidden break-words">{error.length > 50 ? error.substring(0,50) + '...' : error}</p>
                     <button 
                         onClick={onGenerate}
-                        className="bg-red-100 text-red-600 px-3 py-1 text-xs font-bold border-2 border-red-500 hover:bg-red-200 uppercase"
+                        className="bg-red-100 text-red-600 px-3 py-1 text-xs font-normal border-2 border-red-500 hover:bg-red-200 uppercase"
                     >
                         RETRY
                     </button>
@@ -134,7 +135,7 @@ const AssetSlot: React.FC<AssetSlotProps> = ({
                         title="Generate"
                     >
                         <Wand2 size={24} className="mb-1" />
-                        <span className="text-xs font-black uppercase">AI</span>
+                        <span className="text-xs font-normal uppercase">AI</span>
                     </button>
                      <button 
                         onClick={() => inputRef.current?.click()}
@@ -142,10 +143,10 @@ const AssetSlot: React.FC<AssetSlotProps> = ({
                         title="Upload"
                     >
                         <Upload size={24} className="mb-1" />
-                        <span className="text-xs font-black uppercase">UP</span>
+                        <span className="text-xs font-normal uppercase">UP</span>
                     </button>
                  </div>
-                 <div className="text-xs font-bold text-gray-500 text-center uppercase">
+                 <div className="text-xs font-normal text-gray-500 text-center uppercase">
                    {asset.name ? 'READY' : 'NAME?'}
                  </div>
                 </>
@@ -161,15 +162,15 @@ const AssetSlot: React.FC<AssetSlotProps> = ({
             value={asset.name || ''}
             onChange={(e) => onNameChange(e.target.value)}
             placeholder={type === 'character' ? "NAME..." : "PLACE..."}
-            className="w-full bg-[#FFFBEB] border-2 border-black px-3 py-2 font-bold uppercase text-black focus:bg-white outline-none placeholder:text-gray-400 placeholder:normal-case"
+            className="w-full bg-[#FFFBEB] border-2 border-black px-3 py-2 font-normal uppercase text-black focus:bg-white outline-none placeholder:text-gray-400 placeholder:normal-case"
           />
           <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 text-xs font-bold cursor-pointer select-none hover:text-black text-gray-600 group/chk">
-                <div className={clsx("w-4 h-4 border-2 border-black flex items-center justify-center transition-colors", asset.autoReference !== false ? "bg-[#10B981]" : "bg-white")}>
-                    {asset.autoReference !== false && <CheckCircle2 size={12} className="text-black" strokeWidth={3} />}
+            <label className="flex items-center gap-2 text-sm font-normal cursor-pointer select-none hover:text-black text-gray-600 group/chk">
+                <div className={clsx("w-5 h-5 border-2 border-black flex items-center justify-center transition-colors", asset.autoReference !== false ? "bg-[#10B981]" : "bg-white")}>
+                    {asset.autoReference !== false && <Check size={16} className="text-black" strokeWidth={4} />}
                 </div>
                 <input type="checkbox" checked={asset.autoReference !== false} onChange={(e) => onAutoReferenceChange?.(e.target.checked)} className="hidden" />
-                <span className="uppercase tracking-wide">AUTO-REFERENCE</span>
+                <span className="tracking-wide">自动引用</span>
             </label>
           </div>
       </div>
@@ -198,21 +199,55 @@ function App() {
   const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
 
   // Video Duration & Aspect Ratio State (Replaces Scene Count)
-  const [videoDuration, setVideoDuration] = useState<8 | 10 | 15>(8); // Default to 8s (no 5s)
-  const [sceneCount, setSceneCount] = useState<number>(3); // New Scene Count State
+  const [episodeCount, setEpisodeCount] = useState<string>('');
+  const [episodeDuration, setEpisodeDuration] = useState<string>('10–20秒');
+  const [videoDuration, setVideoDuration] = useState<8 | 10 | 15>(8); 
+  const [sceneCount, setSceneCount] = useState<number>(5); 
   const [aspectRatio, setAspectRatio] = useState<'9:16' | '16:9'>('9:16');
-  
-  // Asset Model Selection State
-  // Removed old state, now using state defined in Model Config State section
-  
-  // Text Model Selection State
-  // Removed old state, now using state defined in Model Config State section
 
-  const [draftScript, setDraftScript] = useState(''); 
-  const [scriptOptions, setScriptOptions] = useState<ScriptOption[]>([]); 
+  const [scriptOptions, setScriptOptions] = useState<ScriptOption[]>([]);
+  const [currentEpisode, setCurrentEpisode] = useState(1);
+  const [totalEpisodes, setTotalEpisodes] = useState(1);
   const [regeneratingOptions, setRegeneratingOptions] = useState<number[]>([]); 
 
-  const [scenes, setScenes] = useState<Scene[]>([]);
+  const [episodesScenes, setEpisodesScenes] = useState<Record<number, Scene[]>>({});
+  const [episodesNarration, setEpisodesNarration] = useState<Record<number, string>>({});
+  const [episodesAudioUrl, setEpisodesAudioUrl] = useState<Record<number, string>>({});
+  const [episodesScript, setEpisodesScript] = useState<Record<number, string>>({});
+  
+  const scenes = episodesScenes[currentEpisode] || [];
+  const globalNarration = episodesNarration[currentEpisode] || '';
+  const globalAudioUrl = episodesAudioUrl[currentEpisode];
+  const draftScript = episodesScript[currentEpisode] || '';
+
+  const setScenes = (newScenes: Scene[] | ((prev: Scene[]) => Scene[])) => {
+    setEpisodesScenes(prev => ({
+        ...prev,
+        [currentEpisode]: typeof newScenes === 'function' ? (newScenes as (prev: Scene[]) => Scene[])(prev[currentEpisode] || []) : newScenes
+    }));
+  };
+
+  const setGlobalNarration = (narration: string) => {
+    setEpisodesNarration(prev => ({ ...prev, [currentEpisode]: narration }));
+  };
+
+  const setGlobalAudioUrl = (url: string | undefined) => {
+    if (url) {
+        setEpisodesAudioUrl(prev => ({ ...prev, [currentEpisode]: url }));
+    } else {
+        setEpisodesAudioUrl(prev => {
+            const next = { ...prev };
+            delete next[currentEpisode];
+            return next;
+        });
+    }
+  };
+
+  const setDraftScript = (script: string) => {
+    setEpisodesScript(prev => ({ ...prev, [currentEpisode]: script }));
+  };
+  
+  const [isGeneratingGlobalAudio, setIsGeneratingGlobalAudio] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -242,14 +277,34 @@ function App() {
   const [assetModel, setAssetModel] = useState<string>('gemini-3.1-flash-image-preview');
   const [videoModel, setVideoModel] = useState<VideoModel>('veo_3_1-fast');
   const [audioModel, setAudioModel] = useState<string>('gemini-2.5-pro-preview-tts');
-  
-  // Sync videoDuration with videoModel
+
+  // Helper to calculate scene count based on total duration string and per-scene duration
+  const updateSceneCountFromTotal = (totalStr: string, perScene: number) => {
+    const match = totalStr.match(/(\d+)[–-](\d+)秒/);
+    if (match) {
+      const max = parseInt(match[2]);
+      // For dynamic comics, we want high density.
+      // 10-20s -> 5-7 scenes.
+      // We target roughly one scene every 2.5 - 3 seconds.
+      const calculatedCount = Math.ceil(max / 3) + 1; 
+      setSceneCount(Math.max(5, calculatedCount));
+    }
+  };
+
+  // Sync videoDuration with videoModel and adjust sceneCount based on priority
   useEffect(() => {
     const validDurations = getValidDurations(videoModel);
+    let activeDuration = videoDuration;
+    
     if (!validDurations.includes(videoDuration)) {
-      setVideoDuration(validDurations[0]);
+      activeDuration = validDurations[0];
+      setVideoDuration(activeDuration);
     }
-  }, [videoModel]);
+    
+    if (episodeDuration) {
+      updateSceneCountFromTotal(episodeDuration, activeDuration);
+    }
+  }, [videoModel, videoDuration, episodeDuration]);
   
   // Support Modal State
   const [showSupportModal, setShowSupportModal] = useState(false);
@@ -278,6 +333,7 @@ function App() {
   const videoControllers = useRef<Record<number, AbortController>>({});
 
   // --- State Persistence ---
+  const [showVideoPreview, setShowVideoPreview] = useState(false);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
 
   useEffect(() => {
@@ -290,6 +346,8 @@ function App() {
           if (savedState.selectedStylePath !== undefined) setSelectedStylePath(savedState.selectedStylePath);
           if (savedState.selectedCategory !== undefined) setSelectedCategory(savedState.selectedCategory);
           if (savedState.selectedTemplate !== undefined) setSelectedTemplate(savedState.selectedTemplate);
+          if (savedState.episodeCount !== undefined) setEpisodeCount(savedState.episodeCount);
+          if (savedState.episodeDuration !== undefined) setEpisodeDuration(savedState.episodeDuration);
           if (savedState.videoDuration !== undefined) setVideoDuration(savedState.videoDuration);
           if (savedState.sceneCount !== undefined) setSceneCount(savedState.sceneCount);
           if (savedState.aspectRatio !== undefined) setAspectRatio(savedState.aspectRatio);
@@ -313,6 +371,8 @@ function App() {
           if (savedState.audioModel !== undefined) setAudioModel(savedState.audioModel);
           if (savedState.characters !== undefined) setCharacters(savedState.characters);
           if (savedState.coreScenes !== undefined) setCoreScenes(savedState.coreScenes);
+          if (savedState.globalNarration !== undefined) setGlobalNarration(savedState.globalNarration);
+          if (savedState.globalAudioUrl !== undefined) setGlobalAudioUrl(savedState.globalAudioUrl);
         }
       } catch (e) {
         console.error('Failed to load state', e);
@@ -331,18 +391,23 @@ function App() {
       selectedStylePath,
       selectedCategory,
       selectedTemplate,
+      episodeCount,
+      episodeDuration,
       videoDuration,
       sceneCount,
       aspectRatio,
       draftScript,
       scriptOptions,
-      scenes,
+      episodesScenes,
+      episodesNarration,
+      episodesAudioUrl,
+      episodesScript,
       textModel,
       assetModel,
       videoModel,
       audioModel,
       characters,
-      coreScenes,
+      coreScenes
     };
     
     const timeoutId = setTimeout(() => {
@@ -350,12 +415,14 @@ function App() {
     }, 1000); // 1 second debounce
     
     return () => clearTimeout(timeoutId);
-  }, [isStateLoaded, step, topic, selectedStylePath, selectedCategory, selectedTemplate, videoDuration, sceneCount, aspectRatio, draftScript, scriptOptions, scenes, textModel, assetModel, videoModel, audioModel, characters, coreScenes]);
+  }, [isStateLoaded, step, topic, selectedStylePath, selectedCategory, selectedTemplate, videoDuration, sceneCount, aspectRatio, episodesScript, scriptOptions, episodesScenes, textModel, assetModel, videoModel, audioModel, characters, coreScenes, episodesNarration, episodesAudioUrl]);
 
   // Calculate Reachable Steps
   const enabledSteps = [AppStep.MODEL_CONFIG, AppStep.INPUT];
   if (scriptOptions.length > 0 || draftScript) enabledSteps.push(AppStep.SCRIPT_EDIT);
-  if (scenes.length > 0) {
+  
+  const hasAnyScenes = Object.values(episodesScenes).some(s => s && s.length > 0);
+  if (hasAnyScenes || scenes.length > 0) {
       enabledSteps.push(AppStep.ASSETS);
       enabledSteps.push(AppStep.STORYBOARD);
   }
@@ -367,8 +434,10 @@ function App() {
     if (targetStep === AppStep.INPUT) { setStep(targetStep); return; }
     // Basic gatekeeping
     if (targetStep === AppStep.SCRIPT_EDIT && scriptOptions.length === 0 && !draftScript) { setError("Please generate a script first!"); return; }
-    if (targetStep === AppStep.ASSETS && !scenes.length) { setError("Please finalize the script first!"); return; }
-    if (targetStep === AppStep.STORYBOARD && !scenes.length) { setError("Please finalize the script first!"); return; }
+    
+    // Allow viewing assets/storyboard if any episode has them
+    if (targetStep === AppStep.ASSETS && !hasAnyScenes && !scenes.length) { setError("Please finalize the script first!"); return; }
+    if (targetStep === AppStep.STORYBOARD && !hasAnyScenes && !scenes.length) { setError("Please finalize the script first!"); return; }
     
     setStep(targetStep);
   };
@@ -472,7 +541,12 @@ function App() {
 
       setGeneratingAssetIds(prev => new Set(prev).add(asset.id));
       try {
-          const base64 = await generateAssetImage(asset.name, asset.type, stylePrompt, aspectRatio, asset.description, assetModel);
+          // Find other scene assets with images to use as references for consistency
+          const otherSceneRefs = list
+              .filter(item => item.id !== id && item.type === 'scene' && item.data)
+              .map(item => ({ data: item.data, mimeType: item.mimeType || 'image/png' }));
+
+          const base64 = await generateAssetImage(asset.name, asset.type, stylePrompt, '16:9', asset.description, assetModel, otherSceneRefs);
           updateAsset(setList, id, { mimeType: 'image/png', data: base64, previewUrl: `data:image/png;base64,${base64}` });
       } catch (e: any) {
           setAssetErrors(prev => ({...prev, [asset.id]: e.message}));
@@ -490,15 +564,12 @@ function App() {
       setList: React.Dispatch<React.SetStateAction<AssetItem[]>>,
       categoryName: string
   ) => {
-      const pendingItems = list.filter(item => !item.data);
-      let targets = pendingItems;
+      const targets = list.filter(item => !item.data);
 
-      if (pendingItems.length === 0) {
-          if (!window.confirm(`所有${categoryName}已有图片。是否重新生成所有${categoryName}？`)) return;
-          targets = list;
+      if (targets.length === 0) {
+          alert(`所有${categoryName}已有图片。`);
+          return;
       }
-
-      if (targets.length === 0) return;
 
       const stylePrompt = getFullStyleModifier();
 
@@ -518,7 +589,14 @@ function App() {
       // Use Concurrent Execution for batch generation
       await runConcurrent(targets, 3, async (asset) => {
           try {
-              const base64 = await generateAssetImage(asset.name, asset.type, stylePrompt, aspectRatio, asset.description, assetModel);
+              // For batch generation, we also want to look at what's already there
+              // Note: this might not be perfect as some are being generated in parallel
+              // but it's better than nothing.
+              const otherSceneRefs = list
+                  .filter(item => item.id !== asset.id && item.type === 'scene' && item.data)
+                  .map(item => ({ data: item.data, mimeType: item.mimeType || 'image/png' }));
+
+              const base64 = await generateAssetImage(asset.name, asset.type, stylePrompt, '16:9', asset.description, assetModel, otherSceneRefs);
               
               setList(currentList => {
                   return currentList.map(item => item.id === asset.id ? { 
@@ -723,26 +801,35 @@ function App() {
   const handleStartCreation = async () => {
     if (!topic.trim() || !selectedTemplate || selectedStylePath.length === 0) return;
 
-    const topStyle = selectedStylePath[0];
-    
     const stylePrompt = getFullStyleModifier();
-    
-    // Create Chinese Style Name string for correct script output
     let styleNameCn = selectedStylePath.map(s => s.name).join(' + ');
 
     const sessionId = ++loadingSession.current;
     setLoading(true);
-    setLoadingMessage(`AI is writing your script (${sceneCount} scenes)...`);
+    setLoadingMessage(`AI is writing and optimizing your script for all episodes...`);
     setError(null);
     try {
-        const option = await generateScriptByScenes(topic, stylePrompt, styleNameCn, selectedTemplate!.name, videoDuration, sceneCount, aspectRatio, textModel);
+        const result = await generateAllEpisodes(topic, stylePrompt, styleNameCn, selectedTemplate!.name, episodeDuration, parseInt(episodeCount) || 1, sceneCount, aspectRatio, textModel);
         if (loadingSession.current !== sessionId) return;
 
-        setScriptOptions([option]);
+        const newEpisodesScript: Record<number, string> = {};
+        const newScriptOptions: ScriptOption[] = [];
+
+        result.episodes.forEach((ep, index) => {
+            const epNum = index + 1;
+            newEpisodesScript[epNum] = ep.content;
+            newScriptOptions.push({ title: ep.title, outline: `${sceneCount} scenes`, content: ep.content });
+        });
+
+        setEpisodesScript(newEpisodesScript);
+        setScriptOptions(newScriptOptions);
+        setEpisodesScenes({});
+        setEpisodesNarration({});
+        setEpisodesAudioUrl({});
+        setCurrentEpisode(1);
+        setTotalEpisodes(result.episodes.length);
         
-        // Reset downstream state to ensure clean slate for new project
-        setDraftScript(''); 
-        setScenes([]);
+        // Reset downstream state
         setCharacters([]);
         setCoreScenes([]);
         setAssetErrors({});
@@ -754,6 +841,104 @@ function App() {
     } finally {
         if (loadingSession.current === sessionId) setLoading(false);
     }
+  };
+
+  const handleGenerateEpisodeStoryboard = async (episodeNum: number) => {
+      const scriptText = episodesScript[episodeNum];
+      if (!scriptText) {
+          console.error(`No script found for episode ${episodeNum}`);
+          setError(`No script found for episode ${episodeNum}. Please go back and generate the script first.`);
+          return;
+      }
+
+      const stylePrompt = getFullStyleModifier();
+      const cleanTopic = topic.split(' 一句话简介：')[0];
+
+      const sessionId = ++loadingSession.current;
+      setLoading(true);
+      setLoadingMessage(`Extracting scenes for episode ${episodeNum}...`);
+      setError(null);
+      try {
+          const { scenes: generatedScenes, narration: extractedNarration } = await generateScript(scriptText, stylePrompt, characters.map(c => c.name), cleanTopic);
+          
+          if (loadingSession.current !== sessionId) return;
+
+          if (!generatedScenes || generatedScenes.length === 0) {
+              throw new Error(`Failed to extract scenes for episode ${episodeNum}. The script format might be incorrect.`);
+          }
+
+          setEpisodesNarration(prev => ({ ...prev, [episodeNum]: extractedNarration }));
+          
+          const scenesWithDuration = generatedScenes.map(s => ({ 
+              ...s, 
+              videoDuration: videoDuration as 8 | 10 | 15,
+              isGeneratingImage: true,
+              error: undefined,
+              videoUrls: [],
+              videoUrl: undefined
+          }));
+          
+          setEpisodesScenes(prev => ({ ...prev, [episodeNum]: scenesWithDuration }));
+          setCurrentEpisode(episodeNum);
+          
+          // Go directly to storyboard and start generating images
+          setStep(AppStep.STORYBOARD);
+          setLoadingMessage(`Drawing ${scenesWithDuration.length} frames for episode ${episodeNum}...`);
+          
+          // Use concurrent execution
+          await runConcurrent<Scene>(scenesWithDuration, 3, async (scene, i) => {
+              if (loadingSession.current !== sessionId) return;
+              try {
+                  const promptToUse = scene.visualPrompt || scene.script;
+                  const sceneCharacters = characters.filter(c => 
+                      scene.character?.includes(c.name) || 
+                      scene.script?.includes(c.name) ||
+                      scene.visualPrompt?.includes(c.name) ||
+                      scene.videoPrompt?.includes(c.name)
+                  );
+
+                  const sceneLocations = coreScenes.filter(s => 
+                      scene.script?.includes(s.name) ||
+                      scene.visualPrompt?.includes(s.name) ||
+                      scene.videoPrompt?.includes(s.name)
+                  );
+                  
+                  const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt || '', sceneCharacters, sceneLocations.length > 0 ? sceneLocations : coreScenes, aspectRatio, scene.sceneReferenceImages || [], assetModel, getFullStyleModifier());
+                  
+                  if (loadingSession.current !== sessionId) return;
+
+                  setEpisodesScenes(prev => {
+                      const updated = [...(prev[episodeNum] || [])];
+                      if (updated[i]) {
+                          updated[i] = { 
+                              ...updated[i], 
+                              imageUrl: b64, 
+                              isGeneratingImage: false, 
+                              error: undefined 
+                          };
+                      }
+                      return { ...prev, [episodeNum]: updated };
+                  });
+              } catch (err: any) {
+                   if (loadingSession.current !== sessionId) return;
+                   console.error(`Error generating scene ${i + 1} for episode ${episodeNum}`, err);
+                   setEpisodesScenes(prev => {
+                      const updated = [...(prev[episodeNum] || [])];
+                      if (updated[i]) {
+                          updated[i] = { ...updated[i], isGeneratingImage: false, error: "Generation Failed" };
+                      }
+                      return { ...prev, [episodeNum]: updated };
+                  });
+              }
+          });
+
+      } catch (err: any) {
+          if (loadingSession.current !== sessionId) return;
+          console.error(`Error in handleGenerateEpisodeStoryboard for episode ${episodeNum}:`, err);
+          setError(err.message || 'Scene extraction failed.');
+      } finally {
+          if (loadingSession.current === sessionId) setLoading(false);
+      }
   };
 
   const handleFinalizeScript = async (finalScriptText: string) => {
@@ -769,25 +954,52 @@ function App() {
           setDraftScript(finalScriptText);
           // Clean topic: remove "一句话简介" and "标签"
           const cleanTopic = topic.split(' 一句话简介：')[0];
-          const generatedScenes = await generateScript(finalScriptText, stylePrompt, characters.map(c => c.name), cleanTopic);
-          const extraction = await extractAssetsFromScript(finalScriptText);
+          const { scenes: generatedScenes, narration: extractedNarration } = await generateScript(finalScriptText, stylePrompt, characters.map(c => c.name), cleanTopic);
+          setGlobalNarration(extractedNarration);
+          
+          // Extract assets from all episodes
+          const allScripts = Object.values({ ...episodesScript, [currentEpisode]: finalScriptText }).join('\n\n---\n\n');
+          const extraction = await extractAssetsFromScript(allScripts);
           
           if (loadingSession.current !== sessionId) return;
 
           const newCharacters = extraction.characters
-              .filter(item => item.name !== '旁白')
-              .map((item, i) => ({ id: `c-ext-${i}`, type: 'character' as const, name: item.name, description: item.description, data: '', mimeType: '', previewUrl: '', autoReference: true }));
-          const newCoreScenes = extraction.scenes.map((item, i) => ({ id: `s-ext-${i}`, type: 'scene' as const, name: item.name, description: item.description, data: '', mimeType: '', previewUrl: '', autoReference: true }));
+              .filter(item => {
+                  const n = item.name.toLowerCase();
+                  return n !== '旁白' && !n.includes('声音') && !n.includes('旁白') && !n.includes('音效') && !n.includes('配音');
+              })
+              .map((item, i) => ({ id: `c-ext-${Date.now()}-${i}`, type: 'character' as const, name: item.name, description: item.description, data: '', mimeType: '', previewUrl: '', autoReference: true }));
+          const newCoreScenes = extraction.scenes.map((item, i) => ({ id: `s-ext-${Date.now()}-${i}`, type: 'scene' as const, name: item.name, description: item.description, data: '', mimeType: '', previewUrl: '', autoReference: true }));
 
-          setCharacters(newCharacters);
-          setCoreScenes(newCoreScenes);
+          // Merge characters
+          setCharacters(prev => {
+              const merged = [...prev];
+              newCharacters.forEach(nc => {
+                  if (!merged.some(ec => ec.name.toLowerCase() === nc.name.toLowerCase())) {
+                      merged.push(nc);
+                  }
+              });
+              return merged;
+          });
+
+          // Merge scenes
+          setCoreScenes(prev => {
+              const merged = [...prev];
+              newCoreScenes.forEach(ns => {
+                  if (!merged.some(es => es.name.toLowerCase() === ns.name.toLowerCase())) {
+                      merged.push(ns);
+                  }
+              });
+              return merged;
+          });
+
           setAssetErrors({});
           
           if (extraction.characters.length === 0) addAssetSlot('character');
           if (extraction.scenes.length === 0) addAssetSlot('scene');
 
           // Initialize scenes with selected video duration
-          const scenesWithDuration = generatedScenes.map(s => ({ ...s, videoDuration: videoDuration }));
+          const scenesWithDuration = generatedScenes.map(s => ({ ...s, videoDuration: videoDuration as 8 | 10 | 15 }));
           setScenes(scenesWithDuration);
           setStep(AppStep.ASSETS);
 
@@ -827,10 +1039,17 @@ function App() {
                 const sceneCharacters = characters.filter(c => 
                     scene.character?.includes(c.name) || 
                     scene.script?.includes(c.name) ||
-                    scene.visualPrompt?.includes(c.name)
+                    scene.visualPrompt?.includes(c.name) ||
+                    scene.videoPrompt?.includes(c.name)
+                );
+
+                const sceneLocations = coreScenes.filter(s => 
+                    scene.script?.includes(s.name) ||
+                    scene.visualPrompt?.includes(s.name) ||
+                    scene.videoPrompt?.includes(s.name)
                 );
                 
-                const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt, sceneCharacters, coreScenes, aspectRatio, scene.sceneReferenceImages || [], assetModel);
+                const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt, sceneCharacters, sceneLocations.length > 0 ? sceneLocations : coreScenes, aspectRatio, scene.sceneReferenceImages || [], assetModel, getFullStyleModifier());
                 
                 if (loadingSession.current !== sessionId) return;
 
@@ -885,10 +1104,17 @@ function App() {
           const sceneCharacters = characters.filter(c => 
               scene.character?.includes(c.name) || 
               scene.script?.includes(c.name) ||
-              scene.visualPrompt?.includes(c.name)
+              scene.visualPrompt?.includes(c.name) ||
+              scene.videoPrompt?.includes(c.name)
           );
 
-          const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt, sceneCharacters, coreScenes, aspectRatio, refScenesRaw, assetModel);
+          const sceneLocations = coreScenes.filter(s => 
+              scene.script?.includes(s.name) ||
+              scene.visualPrompt?.includes(s.name) ||
+              scene.videoPrompt?.includes(s.name)
+          );
+
+          const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt, sceneCharacters, sceneLocations.length > 0 ? sceneLocations : coreScenes, aspectRatio, refScenesRaw, assetModel, getFullStyleModifier());
           setScenes(prev => {
               const next = [...prev];
               next[index] = { ...next[index], imageUrl: b64, imageHistory: [...(next[index].imageHistory || []), b64], isGeneratingImage: false };
@@ -944,21 +1170,69 @@ function App() {
   };
 
   const handleDeleteSceneImage = (index: number) => {
-      if (window.confirm('确定要删除这张分镜图片吗？')) {
+      setScenes(prev => {
+          const updated = [...prev];
+          const oldScene = updated[index];
+          const newScene = { ...oldScene, imageUrl: undefined, videoUrls: [], videoUrl: undefined };
+          
+          const currentUrl = oldScene.imageUrl;
+          if (currentUrl && newScene.imageHistory) {
+              newScene.imageHistory = newScene.imageHistory.filter(img => img !== currentUrl);
+          }
+          
+          updated[index] = newScene;
+          return updated;
+      });
+  };
+
+  const handleInsertScene = async (index: number) => {
+      setLoading(true);
+      setLoadingMessage('正在分析剧本并补充关键帧...');
+      try {
+          const stylePrompt = getFullStyleModifier();
+          const newPrompt = await generateMissingScenePrompt(
+              scenes.map(s => s.script).join('\n'),
+              scenes.map(s => ({ script: s.script, visualPrompt: s.visualPrompt })),
+              stylePrompt
+          );
+          
           setScenes(prev => {
-              const updated = [...prev];
-              const oldScene = updated[index];
-              const newScene = { ...oldScene, imageUrl: undefined, videoUrls: [], videoUrl: undefined };
-              
-              const currentUrl = oldScene.imageUrl;
-              if (currentUrl && newScene.imageHistory) {
-                  newScene.imageHistory = newScene.imageHistory.filter(img => img !== currentUrl);
-              }
-              
-              updated[index] = newScene;
-              return updated;
+              const newScenes = [...prev];
+              const newScene: Scene = {
+                  sceneNumber: index + 2,
+                  script: "【AI补充场景】",
+                  visualPrompt: newPrompt,
+                  videoPrompt: "",
+                  videoPromptZh: "",
+                  cameraPrompt: "",
+                  imageUrl: ""
+              };
+              newScenes.splice(index + 1, 0, newScene);
+              return newScenes.map((scene, i) => ({
+                  ...scene,
+                  sceneNumber: i + 1
+              }));
           });
+          
+          // Trigger image generation for the new scene
+          // The new scene will be at index + 1
+          await handleRegenerateImage(index + 1);
+      } catch (error) {
+          console.error("Failed to insert scene:", error);
+          setError("无法自动补充场景，请手动添加。");
+      } finally {
+          setLoading(false);
       }
+  };
+
+  const handleDeleteScene = (index: number) => {
+      setScenes(prev => {
+          const newScenes = prev.filter((_, i) => i !== index);
+          return newScenes.map((scene, i) => ({
+              ...scene,
+              sceneNumber: i + 1
+          }));
+      });
   };
 
   const handleDeleteVideo = (index: number) => {
@@ -969,6 +1243,21 @@ function App() {
       });
   };
   
+  const handleGenerateGlobalAudio = async (voiceName: string = 'Kore') => {
+    if (!globalNarration) return;
+    setIsGeneratingGlobalAudio(true);
+    try {
+      const url = await generateAudio(globalNarration, { 
+        voiceName
+      }, audioModel);
+      setGlobalAudioUrl(url);
+    } catch (e: any) {
+      setError("Global audio generation failed: " + e.message);
+    } finally {
+      setIsGeneratingGlobalAudio(false);
+    }
+  };
+
   const handleSaveConfig = () => {
       if(apiKeyInput.trim() || apiKey2Input.trim()) {
           setCustomConfig(apiKeyInput.trim(), baseUrlInput.trim(), apiKey2Input.trim(), activeKeyIndex);
@@ -1008,7 +1297,7 @@ function App() {
         onEnlarge={() => setViewingAsset(item)}
         onDownload={() => handleDownloadAsset(item)}
         isGenerating={generatingAssetIds.has(item.id)}
-        aspectRatio={aspectRatio}
+        aspectRatio="16:9"
         error={assetErrors[item.id]}
       />
   );
@@ -1072,20 +1361,18 @@ function App() {
   const initialScriptContent = draftScript || (scriptOptions.length > 0 ? scriptOptions[0].content : '');
   const hasGeneratedStoryboardImages = scenes.some(s => !!s.imageUrl);
 
-  // Dynamic Grid Class for Assets based on Aspect Ratio
-  const assetGridClass = aspectRatio === '16:9'
-      ? "grid grid-cols-1 md:grid-cols-2 gap-8" // 2 cols for landscape, increased gap
-      : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"; // 3 cols for portrait/default
+  // Dynamic Grid Class for Assets - Always use 16:9 layout for assets
+  const assetGridClass = "grid grid-cols-1 md:grid-cols-2 gap-8";
 
   if (!isStateLoaded) return null;
 
   return (
     <div className="min-h-screen pb-20 font-sans relative">
-      <header className="border-b-4 border-black bg-[#FACC15] sticky top-0 z-[100] shadow-sm">
+      <header className="border-b-4 border-black bg-[#FACC15] sticky top-0 z-[100]">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
              <Bot size={56} className="text-black" strokeWidth={2.5} />
-             <h1 className="font-sans font-black text-4xl tracking-wider text-black uppercase">{agentConfig.appName}</h1>
+             <h1 className="font-sans font-black text-4xl tracking-tight text-black uppercase">{agentConfig.appName}</h1>
           </div>
           <div className="flex items-center gap-6 relative z-[101]">
               <button onClick={() => setShowConfigModal(true)} className="text-black hover:text-red-600 transition-colors" title="系统设置">
@@ -1132,14 +1419,14 @@ function App() {
                           controls 
                           autoPlay 
                           loop 
-                          className="max-w-full max-h-full shadow-2xl"
+                          className="max-w-full max-h-full"
                           onClick={e => e.stopPropagation()}
                       />
                   ) : (
                       <img 
                           src={viewingAsset.previewUrl} 
                           alt={viewingAsset.name} 
-                          className="max-w-full max-h-full object-contain shadow-2xl" 
+                          className="max-w-full max-h-full object-contain" 
                           onClick={e => e.stopPropagation()} 
                       />
                   )}
@@ -1177,14 +1464,15 @@ function App() {
                           </div>
 
                           {/* Text */}
+                          {/* Text */}
                           <h3 className="text-xl font-bold text-gray-500 tracking-wider font-sans uppercase">WECHAT SUPPORT</h3>
 
                           {/* WeChat Copy Box - Updated Color */}
                           <div 
                             className="w-full flex border-2 border-black cursor-pointer hover:translate-y-1 transition-transform bg-white"
                             onClick={() => {
-                                navigator.clipboard.writeText(agentConfig.wechatCustomerService);
-                                alert(`WeChat ID copied: ${agentConfig.wechatCustomerService}`);
+                                navigator.clipboard.writeText(agentConfig.wechatSupportId);
+                                alert(`WeChat ID copied: ${agentConfig.wechatSupportId}`);
                             }}
                             title="Click to copy"
                           >
@@ -1192,7 +1480,7 @@ function App() {
                                   <span className="font-bold text-lg">微信客服</span>
                               </div>
                               <div className="flex-1 flex items-center justify-center p-3 bg-white">
-                                  <span className="font-black text-2xl tracking-widest">{agentConfig.wechatCustomerService}</span>
+                                  <span className="font-black text-2xl tracking-widest">{agentConfig.wechatSupportId}</span>
                               </div>
                           </div>
                           
@@ -1214,7 +1502,7 @@ function App() {
                           
                           {/* Link Button - Removed Shadow */}
                           <a 
-                              href={agentConfig.agentRecruitmentLink} 
+                              href={agentConfig.recruitmentLink} 
                               target="_blank" 
                               className="block w-full bg-[#EF4444] text-white font-black text-xl py-4 border-2 border-black hover:translate-y-1 transition-all flex items-center justify-center gap-2"
                           >
@@ -1277,6 +1565,17 @@ function App() {
                       </div>
                   </div>
               </div>
+          </div>
+      )}
+
+      {showVideoPreview && (
+          <div className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-4xl p-4 relative">
+              <button onClick={() => setShowVideoPreview(false)} className="absolute top-2 right-2 text-black">
+                <X size={24} />
+              </button>
+              <VideoPreview scenes={scenes} />
+            </div>
           </div>
       )}
 
@@ -1419,7 +1718,7 @@ function App() {
         {step === AppStep.MODEL_CONFIG && (
           <div className="max-w-7xl mx-auto space-y-10 pb-20">
              <div className="text-center space-y-3 mb-12 relative">
-                 <h2 className="text-6xl font-bangers text-white uppercase tracking-wider drop-shadow-[4px_4px_0_#000]">Step 1. The Configuration</h2>
+                 <h2 className="text-6xl font-bangers text-white uppercase tracking-wider">Step 1. The Configuration</h2>
                  <p className="text-white text-xl font-normal bg-black inline-block px-4 py-1 transform -skew-x-12 border-2 border-white">请配置您需要使用的AI大模型</p>
              </div>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1468,7 +1767,6 @@ function App() {
                         <p className="text-gray-600 text-sm mb-2">用于生成角色设定图和分镜参考图。</p>
                         <div className="relative">
                             <select value={assetModel} onChange={(e) => setAssetModel(e.target.value as any)} className="w-full bg-gray-50 border-2 border-black p-4 font-bold text-lg rounded-xl appearance-none cursor-pointer hover:bg-gray-100 focus:outline-none focus:ring-4 focus:ring-[#A855F7]">
-                                <option value="gemini-2.5-flash-image">Gemini-2.5-Flash-Image</option>
                                 <option value="gemini-3-pro-image-preview">Gemini-3-Pro-Image</option>
                                 <option value="gemini-3.1-flash-image-preview">Gemini-3.1-Flash-Image</option>
                             </select>
@@ -1544,7 +1842,7 @@ function App() {
         {step === AppStep.INPUT && (
           <div className="max-w-7xl mx-auto space-y-12 pb-20">
             <div className="text-center space-y-3 mb-12">
-                <h2 className="text-6xl font-bangers text-white uppercase tracking-wider drop-shadow-[4px_4px_0_#000]">Step 2. The Concept</h2>
+                <h2 className="text-6xl font-bangers text-white uppercase tracking-wider">Step 2. The Concept</h2>
                 <p className="text-white text-xl font-normal bg-black inline-block px-4 py-1 transform -skew-x-12 border-2 border-white">选择您的创作方向</p>
             </div>
 
@@ -1642,18 +1940,41 @@ function App() {
                          <div className="pt-6 grid grid-cols-1 md:grid-cols-3 gap-8 border-t-2 border-dashed border-gray-600">
                             <div>
                                 <h3 className="text-2xl font-bangers text-white mb-2 flex items-center gap-2">
+                                    <Film size={24} /> 
+                                    <span>集数 <span className="text-xl ml-1 font-normal">(Episode Count)</span></span>
+                                </h3>
+                                <div className="relative flex items-center">
+                                    <input
+                                        type="number"
+                                        value={episodeCount}
+                                        onChange={(e) => setEpisodeCount(e.target.value)}
+                                        onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                        placeholder="如：10"
+                                        className="w-full h-14 bg-white border-4 border-black px-6 text-2xl font-normal outline-none transition-colors hover:bg-gray-50"
+                                    />
+                                    <span className="absolute right-6 text-2xl font-bangers text-black">集</span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 className="text-2xl font-bangers text-white mb-2 flex items-center gap-2">
                                     <Clock size={24} /> 
-                                    <span>Shot Duration <span className="text-xl ml-1 font-normal">(单视频时长)</span></span>
+                                    <span>单集时长 <span className="text-xl ml-1 font-normal">(Episode Duration)</span></span>
                                 </h3>
                                 <div className="relative">
                                     <select
-                                        value={videoDuration}
-                                        onChange={(e) => setVideoDuration(Number(e.target.value) as 8 | 10 | 15)}
+                                        value={episodeDuration}
+                                        onChange={(e) => setEpisodeDuration(e.target.value)}
                                         className="w-full h-14 bg-white border-4 border-black px-6 text-2xl font-normal outline-none appearance-none cursor-pointer hover:bg-gray-50 uppercase"
                                     >
-                                        {getValidDurations(videoModel).map(d => (
-                                            <option key={d} value={d}>{d} SECONDS ({d}秒)</option>
-                                        ))}
+                                        <option value="10–20秒">10–20秒</option>
+                                        <option value="20–30秒">20–30秒</option>
+                                        <option value="30–40秒">30–40秒</option>
+                                        <option value="40–50秒">40–50秒</option>
+                                        <option value="50–60秒">50–60秒</option>
+                                        <option value="60–70秒">60–70秒</option>
+                                        <option value="70–80秒">70–80秒</option>
+                                        <option value="80–90秒">80–90秒</option>
                                     </select>
                                     <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-black">
                                         <ChevronRight className="rotate-90" size={24} strokeWidth={3} />
@@ -1663,29 +1984,8 @@ function App() {
 
                             <div>
                                 <h3 className="text-2xl font-bangers text-white mb-2 flex items-center gap-2">
-                                    <Clapperboard size={24} /> 
-                                    <span>SCENE COUNT <span className="text-xl ml-1 font-normal">(视频数量)</span></span>
-                                </h3>
-                                <div className="relative">
-                                    <select
-                                        value={sceneCount}
-                                        onChange={(e) => setSceneCount(Number(e.target.value))}
-                                        className="w-full h-14 bg-white border-4 border-black px-6 text-2xl font-normal outline-none appearance-none cursor-pointer hover:bg-gray-50 uppercase"
-                                    >
-                                        {[1,2,3,4,5,6,7,8,9].map(n => (
-                                            <option key={n} value={n}>{n} VIDEOS ({n}个视频)</option>
-                                        ))}
-                                    </select>
-                                    <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-black">
-                                        <ChevronRight className="rotate-90" size={24} strokeWidth={3} />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div>
-                                <h3 className="text-2xl font-bangers text-white mb-2 flex items-center gap-2">
-                                    <Monitor size={24} /> 
-                                    <span>ASPECT RATIO <span className="text-xl ml-1 font-normal">(视频比例)</span></span>
+                                    <Maximize2 size={24} /> 
+                                    <span>画面比例 <span className="text-xl ml-1 font-normal">(Aspect Ratio)</span></span>
                                 </h3>
                                 <div className="relative">
                                     <select
@@ -1706,7 +2006,7 @@ function App() {
                          
                     <div className="flex justify-center pt-8 pb-4">
                         <button 
-                            onClick={handleStartCreation} 
+                            onClick={() => handleStartCreation()} 
                             disabled={!topic.trim() || !isStyleSelectionComplete()} 
                             className="bg-[#EF4444] hover:bg-[#DC2626] text-white px-12 py-5 font-bangers text-3xl tracking-widest uppercase border-4 border-black hover:-translate-y-1 transition-all flex items-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                         >
@@ -1727,7 +2027,12 @@ function App() {
                isGenerating={loading} 
                onNext={() => setStep(AppStep.ASSETS)}
                canGoNext={scenes.length > 0}
-               onRegenerate={handleStartCreation}
+               onRegenerate={() => handleStartCreation()}
+               onPolishScript={setDraftScript}
+               currentEpisode={currentEpisode}
+               totalEpisodes={totalEpisodes}
+               onEpisodeChange={setCurrentEpisode}
+               textModel={textModel}
            />
         )}
 
@@ -1735,23 +2040,33 @@ function App() {
             <div className="max-w-7xl mx-auto space-y-10 animate-fade-in pb-20">
                  <div className="flex flex-col md:flex-row justify-between items-end border-b-4 border-black pb-6 gap-6 relative">
                     <div className="flex-1 space-y-3">
-                        <h2 className="text-6xl font-bangers text-white uppercase tracking-wider drop-shadow-[4px_4px_0_#000]">Step 4. The Cast</h2>
-                        <p className="text-white text-xl font-normal bg-black inline-block px-4 py-1 transform -skew-x-12 border-2 border-white">在此定义您的角色和核心场景</p>
-                        
-                        <div className="flex flex-wrap items-center gap-4 mt-6">
-                            <span className="text-sm font-bold text-black bg-[#FACC15] px-3 py-1 border-2 border-black transform -skew-x-12">
-                                RATIO: {aspectRatio}
-                            </span>
+                        <div className="flex items-center gap-4">
+                            <h2 className="text-6xl font-bangers text-white uppercase tracking-wider">Step 4. The Cast</h2>
+                            <div className="relative shrink-0 mb-2">
+                                <select 
+                                    value={currentEpisode}
+                                    onChange={(e) => setCurrentEpisode(Number(e.target.value))}
+                                    className="w-full bg-[#FACC15] border border-black px-6 py-1.5 text-lg font-normal uppercase outline-none appearance-none cursor-pointer hover:bg-[#EAB308] transition-colors text-black pr-10"
+                                >
+                                    {Array.from({ length: totalEpisodes }, (_, i) => i + 1).map(ep => (
+                                        <option key={ep} value={ep}>第{ep}集</option>
+                                    ))}
+                                </select>
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-black">
+                                    <ChevronDown size={20} strokeWidth={3} />
+                                </div>
+                            </div>
                         </div>
+                        <p className="text-white text-xl font-normal bg-black inline-block px-4 py-1 transform -skew-x-12 border-2 border-white">在此定义您的角色和核心场景</p>
                     </div>
                     
                     <div className="flex gap-4 self-end">
                         {hasGeneratedStoryboardImages && (
-                             <button onClick={() => setStep(AppStep.STORYBOARD)} className="bg-white hover:bg-gray-100 text-black px-6 py-3 font-bangers text-xl tracking-wide flex items-center gap-2 border-4 border-black hover:-translate-y-1 transition-all">
+                             <button onClick={() => setStep(AppStep.STORYBOARD)} className="bg-white hover:bg-gray-100 text-black px-6 py-1.5 font-bangers text-lg tracking-wide flex items-center gap-2 border border-black hover:-translate-y-1 transition-all">
                                 查看分镜 <ArrowRight size={20} />
                              </button>
                         )}
-                        <button onClick={handleGenerateStoryboard} className="bg-[#FACC15] hover:bg-[#EAB308] text-black px-8 py-3 font-bangers text-xl tracking-wide flex items-center gap-2 border-4 border-black hover:-translate-y-1 transition-all">
+                        <button onClick={handleGenerateStoryboard} className="bg-[#FACC15] hover:bg-[#EAB308] text-black px-6 py-1.5 font-bangers text-lg tracking-wide flex items-center gap-2 border border-black hover:-translate-y-1 transition-all">
                             {hasGeneratedStoryboardImages ? <RefreshCw size={20}/> : <ArrowRight size={20} />}
                             {hasGeneratedStoryboardImages ? '全部重绘' : '生成分镜'}
                         </button>
@@ -1770,7 +2085,7 @@ function App() {
                          <div className="flex gap-4">
                              <button 
                                 onClick={() => handleBatchGenerateAssets(characters, setCharacters, 'Characters')}
-                                className="flex items-center gap-2 bg-[#FACC15] hover:bg-[#EAB308] border-2 border-black px-4 py-2 uppercase text-xl"
+                                className="flex items-center gap-2 bg-[#FACC15] hover:bg-[#EAB308] border border-black px-4 py-1.5 uppercase text-lg"
                             >
                                 <Sparkles size={16} /> AI一键生成
                             </button>
@@ -1796,7 +2111,7 @@ function App() {
                          <div className="flex gap-4">
                             <button 
                                 onClick={() => handleBatchGenerateAssets(coreScenes, setCoreScenes, 'Scenes')}
-                                className="flex items-center gap-2 bg-[#FACC15] hover:bg-[#EAB308] border-2 border-black px-4 py-2 uppercase text-xl"
+                                className="flex items-center gap-2 bg-[#FACC15] hover:bg-[#EAB308] border border-black px-4 py-1.5 uppercase text-lg"
                             >
                                 <Sparkles size={16} /> AI一键生成
                             </button>
@@ -1819,11 +2134,11 @@ function App() {
                 onRegenerateImage={handleRegenerateImage}
                 onUpdatePrompt={(i, v, l) => { const s = [...scenes]; s[i].visualPrompt = v; setScenes(s); }}
                 onUpdateScript={(i, v) => { const s = [...scenes]; s[i].script = v; setScenes(s); }}
-                onUpdateVideoPrompt={(i, v) => { const s = [...scenes]; s[i].videoPrompt = v; setScenes(s); }}
                 onSelectSceneImage={(i, h) => { const s=[...scenes]; if(s[i].imageHistory?.[h]) s[i].imageUrl=s[i].imageHistory[h]; setScenes(s); }}
                 onManualUpload={handleManualSceneImageUpload}
                 onDeleteImage={handleDeleteSceneImage}
-                onDeleteVideo={handleDeleteVideo}
+                onInsertScene={handleInsertScene}
+                onDeleteScene={handleDeleteScene}
                 onEnlarge={(url, type) => setViewingAsset({ 
                     name: type === 'video' ? "Generated Video" : "Storyboard Image", 
                     type: 'scene', 
@@ -1834,13 +2149,21 @@ function App() {
                 })}
                 aspectRatio={aspectRatio}
                 videoModel={videoModel}
-                onGenerateVideo={handleGenerateVideo}
-                onGenerateAudio={handleGenerateAudio}
                 onEditImage={handleEditSceneImage}
                 topic={topic}
-                onCancelVideoGeneration={handleCancelVideoGeneration}
+                globalNarration={globalNarration}
+                globalAudioUrl={globalAudioUrl}
+                isGeneratingGlobalAudio={isGeneratingGlobalAudio}
+                onUpdateGlobalNarration={setGlobalNarration}
+                onGenerateGlobalAudio={handleGenerateGlobalAudio}
+                currentEpisode={currentEpisode}
+                totalEpisodes={totalEpisodes}
+                onGenerateEpisodeStoryboard={handleGenerateEpisodeStoryboard}
+                onViewEpisode={setCurrentEpisode}
+                episodesScenes={episodesScenes}
             />
         )}
+
       </main>
       {loading && <LoadingOverlay message={loadingMessage} onCancel={handleCancelLoading} />}
     </div>

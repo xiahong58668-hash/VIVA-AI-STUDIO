@@ -1,12 +1,13 @@
 
 import React, { useState, useRef, useEffect } from 'react';
+import { GoogleGenAI } from "@google/genai";
 import { Scene, AssetItem, VideoModel } from '../types';
 import { getValidDurations, VOICES } from '../constants';
-import { RefreshCw, Download, Maximize2, Wand2, X, Archive, AlertTriangle, ImagePlus, Edit2, Upload, Film, Trash2, LayoutGrid, PlayCircle, Clapperboard, ChevronDown, Layers, Clock, Zap, FileText, Image as ImageIcon, Video, List, Music } from 'lucide-react';
+import { RefreshCw, Download, Maximize2, Wand2, X, Archive, AlertTriangle, ImagePlus, Edit2, Edit3, Upload, Film, Trash2, LayoutGrid, PlayCircle, Clapperboard, ChevronDown, Layers, Clock, Zap, FileText, Image as ImageIcon, Video, List, Music, Plus, Sparkles } from 'lucide-react';
 import { clsx } from 'clsx';
 import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
-import { agentConfig } from '../agentConfig';
+import { proxyConfig as agentConfig } from '../src/proxyConfig';
 
 const getBaseUrl = () => {
     if (typeof window !== 'undefined') {
@@ -20,33 +21,108 @@ interface Props {
   assets: { characters: AssetItem[], coreScenes: AssetItem[] };
   onRegenerateImage: (sceneIndex: number) => void;
   onUpdatePrompt: (sceneIndex: number, newPrompt: string, lang: 'en' | 'zh') => void;
-  onUpdateScript: (sceneIndex: number, newScript: string) => void;
+  onUpdateScript?: (sceneIndex: number, newScript: string) => void;
   onUpdateVideoPrompt?: (sceneIndex: number, newPrompt: string) => void;
   onSelectSceneImage?: (sceneIndex: number, historyIndex: number) => void;
   onManualUpload: (sceneIndex: number, file: File) => void;
   onDeleteImage: (sceneIndex: number) => void;
-  onDeleteVideo?: (sceneIndex: number) => void;
   onEnlarge: (url: string, type: 'image' | 'video') => void;
   aspectRatio: '9:16' | '16:9';
   videoModel: VideoModel;
-  onGenerateVideo?: (sceneIndex: number, duration: number, model: VideoModel) => void;
-  onGenerateAudio?: (sceneIndex: number, prompt: string, voiceConfig: { voiceName?: string; multiSpeakerVoiceConfig?: { speakerVoiceConfigs: { speaker: string; voiceName: string }[] } }) => void;
-  onBatchGenerateVideos?: (model: VideoModel) => void;
   onEditImage?: (sceneIndex: number, instruction: string) => void;
   onRefinePrompt?: (sceneIndex: number) => void;
   topic?: string;
-  onCancelVideoGeneration?: (sceneIndex: number) => void;
+  globalNarration?: string;
+  globalAudioUrl?: string;
+  isGeneratingGlobalAudio?: boolean;
+  onUpdateGlobalNarration?: (narration: string) => void;
+  onGenerateGlobalAudio?: (voiceName: string) => void;
+  onInsertScene?: (index: number) => void;
+  onDeleteScene?: (index: number) => void;
+  currentEpisode: number;
+  totalEpisodes: number;
+  onGenerateEpisodeStoryboard: (episode: number) => void;
+  onViewEpisode: (episode: number) => void;
+  episodesScenes: Record<number, Scene[]>;
 }
 
 const StoryboardGrid: React.FC<Props> = ({ 
-    scenes, assets, onRegenerateImage, onUpdatePrompt, onUpdateScript, onUpdateVideoPrompt,
-    onSelectSceneImage, onManualUpload, onDeleteImage, onDeleteVideo, onEnlarge, aspectRatio, videoModel, onGenerateVideo, onGenerateAudio, onBatchGenerateVideos, onEditImage, onRefinePrompt, topic,
-    onCancelVideoGeneration
+    scenes, assets, onRegenerateImage, onUpdatePrompt, onUpdateScript,
+    onSelectSceneImage, onManualUpload, onDeleteImage, onEnlarge, aspectRatio, videoModel, onEditImage, onRefinePrompt, topic,
+    globalNarration,
+    globalAudioUrl,
+    isGeneratingGlobalAudio,
+    onUpdateGlobalNarration,
+    onGenerateGlobalAudio,
+    onInsertScene,
+    onDeleteScene,
+    currentEpisode,
+    totalEpisodes,
+    onGenerateEpisodeStoryboard,
+    onViewEpisode,
+    episodesScenes
 }) => {
   const [isExporting, setIsExporting] = useState(false);
-  const [editingSceneIndex, setEditingSceneIndex] = useState<number | null>(null);
-  const [editInstruction, setEditInstruction] = useState('');
-  
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [currentPreviewIndex, setCurrentPreviewIndex] = useState(0);
+  const [selectedVoice, setSelectedVoice] = useState('Kore');
+  const [isRefining, setIsRefining] = useState(false);
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
+  const previewAudioRef = useRef<HTMLAudioElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleAIRefine = async () => {
+      if (!globalNarration) return;
+      setIsRefining(true);
+      try {
+          const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+          const systemInstruction = `你是一个动态漫剧本优化专家。请根据以下《动态漫剧本 AI 优化通用设定描述》对用户提供的剧本进行优化。
+优化核心目标：适配动态漫制作、强化画面适配性、提升内容感染力、贴合原创意核心。
+具体要求：
+1. 整体结构优化：确保基础信息、分镜、配音、时长清晰对应。
+2. 分镜优化：补充视觉细节（镜头角度、色调、光影、质感），确保镜头衔接流畅，时长精准，画面感染力强。
+3. 配音文案优化：
+   - 必须使用第三人称讲故事者的身份，严禁出现第一人称（如“我”、“我的”）。
+   - 格式严格限制为：(语气/节奏/重音等...) 文案。
+   - 严禁包含数字、镜号、秒数等任何非配音内容。
+4. 文案细节优化：强化情节紧凑性，统一风格，补充动作/环境细节。
+5. 格式保留：严格保持原剧本的原有格式、标注形式和规范。
+请直接输出优化后的剧本内容。`;
+
+          const response = await ai.models.generateContent({
+              model: "gemini-3.1-pro-preview",
+              contents: `请优化以下剧本：\n${globalNarration}`,
+              config: {
+                  systemInstruction: systemInstruction,
+              },
+          });
+          if (response.text) {
+              onUpdateGlobalNarration?.(response.text);
+          }
+      } catch (error) {
+          console.error("AI 润色失败:", error);
+      } finally {
+          setIsRefining(false);
+      }
+  };
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [globalNarration]);
+
+  const handleDownloadAudio = () => {
+    if (!globalAudioUrl) return;
+    const link = document.createElement('a');
+    link.href = globalAudioUrl;
+    link.download = `narration_${topic || 'video'}.mp3`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleDownloadImage = (base64Data: string, sceneNum: number) => {
     const link = document.createElement('a');
     link.href = `data:image/png;base64,${base64Data}`;
@@ -88,58 +164,119 @@ const StoryboardGrid: React.FC<Props> = ({
       } catch (error) { console.error("Export failed:", error); } finally { setIsExporting(false); }
   };
 
-  const submitEdit = () => {
-      if (editingSceneIndex !== null && editInstruction.trim() && onEditImage) {
-          onEditImage(editingSceneIndex, editInstruction.trim());
-          setEditingSceneIndex(null);
-          setEditInstruction('');
+  const startFullPreview = () => {
+      setCurrentPreviewIndex(0);
+      setIsPreviewOpen(true);
+  };
+
+  const nextPreviewScene = () => {
+      if (currentPreviewIndex < scenes.length - 1) {
+          setCurrentPreviewIndex(prev => prev + 1);
+      } else {
+          setIsPreviewOpen(false);
       }
   };
 
+  useEffect(() => {
+      if (isPreviewOpen) {
+          const currentScene = scenes[currentPreviewIndex];
+          const video = previewVideoRef.current;
+          const audio = previewAudioRef.current;
+
+          if (audio && currentScene.audioUrl) {
+              audio.src = currentScene.audioUrl;
+              audio.play().catch(e => console.error("Audio play failed", e));
+          }
+
+          if (video && currentScene.videoUrls && currentScene.videoUrls.length > 0) {
+              video.src = currentScene.videoUrls[0];
+              video.play().catch(e => console.error("Video play failed", e));
+          }
+      }
+  }, [isPreviewOpen, currentPreviewIndex, scenes]);
+
   return (
-    <div className="space-y-12 pb-20 max-w-7xl mx-auto animate-fade-in relative">
-      {/* Edit Modal */}
-      {editingSceneIndex !== null && (
-          <div className="fixed inset-0 z-[150] bg-black/90 flex items-center justify-center p-4">
-              <div className="bg-white border-4 border-black p-8 max-w-lg w-full comic-shadow-lg animate-in zoom-in duration-200">
-                  <div className="flex justify-between items-center mb-6 border-b-2 border-black pb-4">
-                      <h3 className="text-3xl font-normal text-black flex items-center gap-2">
-                          <Wand2 className="text-[#FACC15]" size={32} /> 
-                          分镜图编辑
-                      </h3>
-                      <button onClick={() => setEditingSceneIndex(null)} className="text-black hover:text-red-500 transition-colors">
-                          <X size={32} strokeWidth={3} />
-                      </button>
-                  </div>
-                  
-                  <div className="space-y-4">
-                      {scenes[editingSceneIndex].imageUrl && (
-                          <div className="w-full h-48 bg-black border-2 border-black overflow-hidden mb-4 relative">
-                              <img src={`data:image/png;base64,${scenes[editingSceneIndex].imageUrl}`} className="w-full h-full object-contain" />
-                          </div>
+    <div className="space-y-12 pb-20 max-w-[1600px] mx-auto animate-fade-in relative px-4">
+      {/* Full Preview Modal */}
+      {isPreviewOpen && (
+          <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center p-4 md:p-10">
+              <button 
+                  onClick={() => setIsPreviewOpen(false)}
+                  className="absolute top-6 right-6 text-white hover:text-[#FACC15] transition-colors z-50"
+              >
+                  <X size={48} strokeWidth={3} />
+              </button>
+
+              <div className="w-full max-w-5xl flex flex-col gap-6">
+                  <div className="relative bg-black border-4 border-white overflow-hidden flex items-center justify-center" style={{ aspectRatio: aspectRatio === '9:16' ? '9/16' : '16/9', maxHeight: '70vh', margin: '0 auto' }}>
+                      {scenes[currentPreviewIndex].videoUrls && scenes[currentPreviewIndex].videoUrls!.length > 0 ? (
+                          <video 
+                              ref={previewVideoRef}
+                              className="w-full h-full object-contain"
+                              onEnded={() => {
+                                  if (!scenes[currentPreviewIndex].audioUrl) {
+                                      nextPreviewScene();
+                                  }
+                              }}
+                              autoPlay
+                              muted={!!scenes[currentPreviewIndex].audioUrl}
+                          />
+                      ) : (
+                          <img 
+                              src={scenes[currentPreviewIndex].imageUrl ? `data:image/png;base64,${scenes[currentPreviewIndex].imageUrl}` : 'https://picsum.photos/seed/placeholder/800/450'} 
+                              className="w-full h-full object-contain"
+                              alt="Preview"
+                          />
                       )}
                       
-                      <div>
-                          <label className="text-xl font-normal text-black mb-2 block">修改指令</label>
-                          <textarea 
-                              value={editInstruction}
-                              onChange={(e) => setEditInstruction(e.target.value)}
-                              placeholder="例如：让角色转过身，或者让天开始下雨..."
-                              className="w-full bg-gray-100 border-2 border-black p-4 text-black focus:bg-white outline-none resize-none h-32 text-lg font-normal"
-                              autoFocus
-                          />
+                      {/* Audio element (hidden) */}
+                      <audio 
+                          ref={previewAudioRef}
+                          onEnded={nextPreviewScene}
+                          autoPlay
+                      />
+
+                      {/* Subtitles/Script Overlay */}
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-6 text-center">
+                          <p className="text-white text-2xl font-bold tracking-wide">
+                              {scenes[currentPreviewIndex].script}
+                          </p>
                       </div>
-                      
-                      <div className="flex justify-end gap-3 pt-4">
-                          <button onClick={() => setEditingSceneIndex(null)} className="px-6 py-3 bg-gray-200 border-2 border-black hover:bg-gray-300 text-black font-normal tracking-wide text-xl">
-                              取消
+
+                      {/* Progress Indicator */}
+                      <div className="absolute top-0 left-0 right-0 h-2 bg-gray-800 flex">
+                          {scenes.map((_, i) => (
+                              <div 
+                                  key={i} 
+                                  className={clsx(
+                                      "h-full transition-all duration-300",
+                                      i < currentPreviewIndex ? "bg-[#10B981] w-full" : 
+                                      i === currentPreviewIndex ? "bg-[#FACC15] w-full" : "bg-transparent w-full"
+                                  )}
+                                  style={{ borderRight: i < scenes.length - 1 ? '1px solid black' : 'none' }}
+                              />
+                          ))}
+                      </div>
+                  </div>
+
+                  <div className="flex justify-between items-center text-white">
+                      <div className="flex flex-col">
+                          <span className="font-bangers text-3xl text-[#FACC15]">分镜 {currentPreviewIndex + 1} / {scenes.length}</span>
+                          <span className="text-xl opacity-80">分镜 {scenes[currentPreviewIndex].sceneNumber}</span>
+                      </div>
+                      <div className="flex gap-4">
+                          <button 
+                              onClick={() => setCurrentPreviewIndex(prev => Math.max(0, prev - 1))}
+                              disabled={currentPreviewIndex === 0}
+                              className="p-4 bg-white/10 hover:bg-white/20 border-2 border-white disabled:opacity-30"
+                          >
+                              <ChevronDown className="rotate-90" size={32} />
                           </button>
                           <button 
-                            onClick={submitEdit}
-                            disabled={!editInstruction.trim()}
-                            className="px-8 py-3 bg-[#FACC15] border-2 border-black hover:bg-[#EAB308] text-black font-normal tracking-wide text-xl disabled:opacity-50"
+                              onClick={nextPreviewScene}
+                              className="p-4 bg-[#FACC15] text-black border-2 border-black hover:scale-105 transition-transform"
                           >
-                              修改
+                              <ChevronDown className="-rotate-90" size={32} />
                           </button>
                       </div>
                   </div>
@@ -147,149 +284,253 @@ const StoryboardGrid: React.FC<Props> = ({
           </div>
       )}
 
-      <div className="flex flex-col md:flex-row justify-between items-end border-b-4 border-black pb-6 gap-6">
+      <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6 relative">
         <div className="flex-1 space-y-3">
-            <h2 className="text-6xl font-bangers text-white uppercase tracking-wider drop-shadow-[4px_4px_0_#000]">Step 5. The Production</h2>
-            <p className="text-white text-xl font-normal bg-black inline-block px-4 py-1 transform -skew-x-12 border-2 border-white">分镜完成。您可以调整、重绘并生成视频</p>
-            
-            <div className="flex flex-wrap items-center gap-4 mt-6">
-                <span className="text-sm font-bold text-black bg-[#FACC15] px-3 py-1 border-2 border-black transform -skew-x-12">
-                RATIO: {aspectRatio}
-                </span>
+            <div className="flex items-center gap-4">
+                <h2 className="text-6xl font-bangers text-white uppercase tracking-wider">Step 5. Storyboard</h2>
+                <div className="relative group">
+                    <select 
+                        value={currentEpisode}
+                        onChange={(e) => onViewEpisode(Number(e.target.value))}
+                        className="appearance-none bg-[#FACC15] text-black font-normal text-lg px-6 py-1.5 border border-black pr-10 cursor-pointer hover:bg-yellow-300 transition-colors"
+                    >
+                        {Array.from({ length: totalEpisodes }, (_, i) => i + 1).map(ep => (
+                            <option key={ep} value={ep}>第 {ep} 集</option>
+                        ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-black" size={20} strokeWidth={3} />
+                </div>
             </div>
+            <p className="text-white text-xl font-normal bg-black inline-block px-4 py-1 transform -skew-x-12 border-2 border-white">分镜完成。您可以编辑、重绘分镜图</p>
         </div>
         
-        <div className="flex gap-3">
-            <a 
-                href={`${getBaseUrl()}/console/task`} 
-                target="_blank" 
-                rel="noreferrer"
-                className="flex items-center gap-2 bg-white hover:bg-gray-100 text-black px-8 py-3 border-4 border-black font-normal text-xl hover:-translate-y-1 transition-all no-underline"
-            >
-                <List size={20} /> 任务 (查询进度)
-            </a>
-
+        <div className="flex gap-3 pb-2">
             <button 
                 onClick={handleExportProject}
                 disabled={isExporting}
-                className="flex items-center gap-2 bg-[#FACC15] hover:bg-[#EAB308] text-black px-8 py-3 border-4 border-black font-normal text-xl hover:-translate-y-1 transition-all"
+                className="flex items-center gap-2 bg-[#FACC15] hover:bg-[#EAB308] text-black px-6 py-1.5 border border-black font-normal text-lg hover:-translate-y-1 transition-all"
             >
-                <Archive size={20} /> {isExporting ? '压缩中...' : '导出 ZIP（素材下载）'}
+                <Archive size={20} /> {isExporting ? '压缩中...' : '素材下载'}
             </button>
         </div>
       </div>
 
-      <div className="flex flex-col gap-10">
-          {scenes.map((scene, index) => (
-             <SceneRow 
-                key={scene.sceneNumber}
-                scene={scene}
-                index={index}
-                aspectRatio={aspectRatio}
-                videoModel={videoModel}
-                characters={assets.characters}
-                onRegenerate={() => onRegenerateImage(index)}
-                onUpdatePrompt={onUpdatePrompt}
-                onUpdateScript={onUpdateScript}
-                onUpdateVideoPrompt={onUpdateVideoPrompt}
-                onEnlarge={onEnlarge}
-                onDownload={() => scene.imageUrl && handleDownloadImage(scene.imageUrl, scene.sceneNumber)}
-                onUpload={(f) => onManualUpload(index, f)}
-                onDelete={() => onDeleteImage(index)}
-                onDeleteVideo={() => onDeleteVideo && onDeleteVideo(index)}
-                onGenerateVideo={(duration) => onGenerateVideo && onGenerateVideo(index, duration, videoModel)}
-                onGenerateAudio={(prompt, voiceConfig) => onGenerateAudio && onGenerateAudio(index, prompt, voiceConfig)}
-                onEditImage={() => setEditingSceneIndex(index)}
-                onCancelVideo={() => onCancelVideoGeneration && onCancelVideoGeneration(index)}
-             />
-          ))}
+      <div className="bg-black p-8 border-4 border-white relative mt-8">
+          <div className="absolute -top-5 left-10 bg-white border-2 border-black px-4 py-1 font-bangers text-xl transform -rotate-1">
+             STORYBOARD (分镜画面)
+          </div>
+          <div className={clsx(
+              "grid gap-8 pt-4",
+              aspectRatio === '9:16' 
+                ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" 
+                : "grid-cols-1 md:grid-cols-2"
+          )}>
+              {scenes.map((scene, index) => (
+                  <SceneImageCard 
+                      key={scene.sceneNumber}
+                      scene={scene}
+                      index={index}
+                      aspectRatio={aspectRatio}
+                      onRegenerate={() => onRegenerateImage(index)}
+                      onUpdatePrompt={onUpdatePrompt}
+                      onUpdateScript={onUpdateScript}
+                      onEnlarge={onEnlarge}
+                      onDownload={() => scene.imageUrl && handleDownloadImage(scene.imageUrl, scene.sceneNumber)}
+                      onUpload={(f) => onManualUpload(index, f)}
+                      onEditImage={onEditImage}
+                      onInsertScene={onInsertScene}
+                      onDeleteScene={onDeleteScene}
+                  />
+              ))}
+          </div>
+      </div>
+
+      {/* Global Audio Generation Section */}
+      <div className="bg-black p-8 border-4 border-white relative mt-10">
+          <div className="absolute -top-5 left-10 bg-white border-2 border-black px-4 py-1 font-bangers text-xl transform -rotate-1">
+             NARRATION (配音文案)
+          </div>
+          <div className="space-y-4">
+              <textarea 
+                  ref={textareaRef}
+                  value={globalNarration || ''}
+                  onChange={(e) => onUpdateGlobalNarration?.(e.target.value)}
+                  placeholder="（语气/节奏/重音等..）文案"
+                  className="w-full min-h-[160px] bg-white border-4 border-black py-5 px-6 text-lg font-normal font-comic outline-none resize-none overflow-hidden text-black leading-relaxed placeholder:text-gray-400 focus:bg-yellow-50 transition-colors"
+              />
+              <div className="flex flex-col gap-4">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex-1 flex items-center gap-4">
+                          <div className="relative w-48 shrink-0">
+                              <select 
+                                value={selectedVoice}
+                                onChange={(e) => setSelectedVoice(e.target.value)}
+                                className="w-full h-12 bg-white border-4 border-black px-4 text-lg font-normal outline-none appearance-none cursor-pointer hover:bg-gray-50 uppercase"
+                              >
+                                  {VOICES.map(v => (
+                                      <option key={v.id} value={v.id}>{v.name}</option>
+                                  ))}
+                              </select>
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-black">
+                                  <ChevronDown className="rotate-90" size={16} strokeWidth={3} />
+                              </div>
+                          </div>
+                          
+                          <button 
+                              onClick={() => onGenerateGlobalAudio?.(selectedVoice)}
+                              disabled={isGeneratingGlobalAudio || !globalNarration}
+                              className={clsx(
+                                  "flex items-center justify-center gap-2 h-12 px-6 border-4 border-black text-lg font-normal transition-all hover:-translate-y-1",
+                                  isGeneratingGlobalAudio 
+                                      ? "bg-gray-400 text-gray-200 cursor-not-allowed" 
+                                      : "bg-[#FACC15] text-black hover:bg-[#EAB308]"
+                              )}
+                          >
+                              {isGeneratingGlobalAudio ? <RefreshCw size={20} className="animate-spin" /> : <Wand2 size={20} />}
+                              {isGeneratingGlobalAudio ? '生成中...' : '生成音频'}
+                          </button>
+
+                          {globalAudioUrl ? (
+                              <div className="flex items-center bg-white px-2 border-4 border-black flex-1 h-12">
+                                  <audio src={globalAudioUrl} controls controlsList="nodownload" className="flex-1 h-8 outline-none" />
+                              </div>
+                          ) : (
+                              <div className="text-gray-400 italic text-lg flex-1 flex items-center h-12">尚未生成音频</div>
+                          )}
+                      </div>
+                      <div className="flex items-center gap-4 shrink-0">
+                          {globalAudioUrl && (
+                              <button 
+                                  onClick={handleDownloadAudio}
+                                  className="flex items-center justify-center h-12 w-12 bg-white border-4 border-black hover:bg-gray-100 transition-all hover:-translate-y-1 text-black"
+                                  title="下载音频"
+                              >
+                                  <Download size={20} />
+                              </button>
+                          )}
+                      </div>
+                  </div>
+
+                  {(currentEpisode > 1 || currentEpisode < totalEpisodes) && (
+                      <div className="flex items-center justify-end gap-4 pt-4 border-t-2 border-gray-800">
+                          {currentEpisode > 1 && (
+                              <button 
+                                  onClick={() => onViewEpisode(currentEpisode - 1)}
+                                  className="flex items-center justify-center gap-2 h-12 px-6 bg-[#3B82F6] hover:bg-[#2563EB] text-white border-4 border-black text-lg font-normal transition-all hover:-translate-y-1"
+                              >
+                                  <PlayCircle size={20} className="rotate-180" />
+                                  查看第{currentEpisode - 1}集
+                              </button>
+                          )}
+                          {currentEpisode < totalEpisodes && (
+                              (episodesScenes[currentEpisode + 1] && episodesScenes[currentEpisode + 1].length > 0) ? (
+                                <button 
+                                    onClick={() => onViewEpisode(currentEpisode + 1)}
+                                    className="flex items-center justify-center gap-2 h-12 px-6 bg-[#3B82F6] hover:bg-[#2563EB] text-white border-4 border-black text-lg font-normal transition-all hover:-translate-y-1"
+                                >
+                                    <PlayCircle size={20} />
+                                    查看第{currentEpisode + 1}集
+                                </button>
+                              ) : (
+                                <button 
+                                    onClick={() => onGenerateEpisodeStoryboard(currentEpisode + 1)}
+                                    className="flex items-center justify-center gap-2 h-12 px-6 bg-[#EF4444] hover:bg-[#DC2626] text-white border-4 border-black text-lg font-normal transition-all hover:-translate-y-1"
+                                >
+                                    <Sparkles size={20} />
+                                    生成第{currentEpisode + 1}集
+                                </button>
+                              )
+                          )}
+                      </div>
+                  )}
+              </div>
+          </div>
       </div>
     </div>
   );
 };
 
-interface CardProps {
+interface SceneImageCardProps {
     scene: Scene;
     index: number;
     aspectRatio: '9:16' | '16:9';
-    videoModel: VideoModel;
-    characters: AssetItem[];
     onRegenerate: () => void;
     onUpdatePrompt: (i: number, p: string, l: 'en' | 'zh') => void;
-    onUpdateScript: (i: number, s: string) => void;
-    onUpdateVideoPrompt?: (i: number, p: string) => void;
+    onUpdateScript?: (i: number, s: string) => void;
     onEnlarge: (url: string, type: 'image' | 'video') => void;
     onDownload: () => void;
     onUpload: (f: File) => void;
-    onDelete: () => void;
-    onDeleteVideo?: () => void;
-    onGenerateVideo: (duration: number) => void;
-    onGenerateAudio: (prompt: string, voiceConfig: { voiceName?: string; multiSpeakerVoiceConfig?: { speakerVoiceConfigs: { speaker: string; voiceName: string }[] } }) => void;
-    onEditImage: () => void;
-    onCancelVideo?: () => void;
+    onEditImage?: (index: number, instruction: string) => void;
+    onInsertScene?: (index: number) => void;
+    onDeleteScene?: (index: number) => void;
 }
 
-const SceneRow: React.FC<CardProps> = ({ 
-    scene, index, aspectRatio, videoModel, characters, onRegenerate, onUpdatePrompt, onUpdateScript, onUpdateVideoPrompt,
-    onEnlarge, onDownload, onUpload, onDelete, onDeleteVideo, onGenerateVideo, onGenerateAudio, onEditImage, onCancelVideo
+const SceneImageCard: React.FC<SceneImageCardProps> = ({ 
+    scene, index, aspectRatio, onRegenerate, onUpdatePrompt, onUpdateScript,
+    onEnlarge, onDownload, onUpload, onEditImage, onInsertScene, onDeleteScene
 }) => {
     const fileRef = useRef<HTMLInputElement>(null);
+    const editBoxRef = useRef<HTMLDivElement>(null);
+    const redrawBoxRef = useRef<HTMLDivElement>(null);
+    const [isEditingInstruction, setIsEditingInstruction] = useState(false);
+    const [isEditingPrompt, setIsEditingPrompt] = useState(false);
+    const [localInstruction, setLocalInstruction] = useState('');
+    const [localPrompt, setLocalPrompt] = useState(scene.visualPromptZh || scene.visualPrompt || '');
+    const [localScript, setLocalScript] = useState(scene.script || '');
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (isEditingInstruction && editBoxRef.current && !editBoxRef.current.contains(event.target as Node)) {
+                setIsEditingInstruction(false);
+            }
+            if (isEditingPrompt && redrawBoxRef.current && !redrawBoxRef.current.contains(event.target as Node)) {
+                setIsEditingPrompt(false);
+            }
+        };
+
+        if (isEditingInstruction || isEditingPrompt) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isEditingInstruction, isEditingPrompt]);
+
+    useEffect(() => {
+        if (isEditingPrompt) {
+            setLocalPrompt(scene.visualPromptZh || scene.visualPrompt || '');
+            setLocalScript(scene.script || '');
+        }
+    }, [isEditingPrompt, scene.visualPromptZh, scene.visualPrompt, scene.script]);
+
     const aspectClass = aspectRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video';
-    const gridItemAspectClass = aspectRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video';
-    
-    // Tab state
-    const [activeTab, setActiveTab] = useState<'script' | 'visual' | 'video'>('script');
-    const [showImage, setShowImage] = useState(false);
-    
-    // Audio state
-    const [speakerA, setSpeakerA] = useState({ name: characters[0]?.name || '角色 A', voice: 'Kore', prompt: '' });
-    const [speakerB, setSpeakerB] = useState({ name: characters[1]?.name || '角色 B', voice: 'Puck', prompt: '' });
 
-    // Sync speaker state with scene.audios
-    useEffect(() => {
-        if (scene.audios && scene.audios.length >= 2) {
-            setSpeakerA({
-                name: scene.audios[0].name || characters[0]?.name || '角色 A',
-                voice: scene.audios[0].voice || 'Kore',
-                prompt: scene.audios[0].prompt || ''
-            });
-            setSpeakerB({
-                name: scene.audios[1].name || characters[1]?.name || '角色 B',
-                voice: scene.audios[1].voice || 'Puck',
-                prompt: scene.audios[1].prompt || ''
-            });
+    const handleInstructionSubmit = () => {
+        if (localInstruction.trim() && onEditImage) {
+            onEditImage(index, localInstruction.trim());
+            setIsEditingInstruction(false);
+            setLocalInstruction('');
         }
-    }, [scene.audios, characters]);
+    };
 
-    // Duration Logic
-    const isVeo = videoModel.includes('veo');
-    const isGrok10 = videoModel === 'grok-video-3-10s';
-    const isGrok15 = videoModel === 'grok-video-3-15s';
-    
-    const [selectedDuration, setSelectedDuration] = useState<8 | 10 | 15>(scene.videoDuration || (isVeo ? 8 : isGrok10 ? 10 : isGrok15 ? 15 : 10) as 8 | 10 | 15);
-
-    // Sync duration when model changes
-    useEffect(() => {
-        const validDurations = getValidDurations(videoModel);
-        if (!validDurations.includes(selectedDuration)) {
-            setSelectedDuration(validDurations[0]);
+    const handleRegenerateSubmit = () => {
+        if (localPrompt !== (scene.visualPromptZh || scene.visualPrompt)) {
+            onUpdatePrompt(index, localPrompt, 'zh');
         }
-    }, [videoModel]);
-
-    const videoUrls = scene.videoUrls || (scene.videoUrl ? [scene.videoUrl] : []);
-    const hasMultipleVideos = videoUrls.length > 1;
-
-    const uploadBtnClass = "flex items-center gap-2 bg-[#FACC15] hover:bg-[#EAB308] text-black px-6 py-2 border-2 border-black font-bangers text-xl hover:-translate-y-1 transition-all";
+        if (localScript !== scene.script && onUpdateScript) {
+            onUpdateScript(index, localScript);
+        }
+        onRegenerate();
+        setIsEditingPrompt(false);
+    };
 
     return (
-        <div className="bg-white border-4 border-black p-0 flex flex-col relative h-auto">
-            <div className="flex flex-col md:flex-row relative h-auto">
-                 {/* Left Column: Image/Video Display (Expanded Space) */}
-            <div className={`relative flex-1 bg-black border-b-4 md:border-b-0 md:border-r-4 border-black min-h-[400px] overflow-hidden flex items-center justify-center`}>
-                 {/* Blurred Background for both orientations */}
+        <div className="bg-black border-0 flex flex-col overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+            <div className="relative w-full bg-black overflow-hidden flex items-center justify-center">
+                 {/* Blurred Background */}
                  {scene.imageUrl && (
                      <div 
-                        className="absolute inset-0 z-0 opacity-60 blur-3xl scale-125"
+                        className="absolute inset-0 z-0 opacity-40 blur-2xl scale-125"
                         style={{ 
                             backgroundImage: `url(data:image/png;base64,${scene.imageUrl})`,
                             backgroundSize: 'cover',
@@ -297,115 +538,64 @@ const SceneRow: React.FC<CardProps> = ({
                         }}
                      />
                  )}
-                 <div className={`relative w-full h-full flex items-center justify-center z-10 p-2`}>
-                    <div className={clsx(
-                        "relative w-full h-full max-h-[800px] transition-all group shadow-2xl flex items-center justify-center", 
-                        !hasMultipleVideos && aspectClass
-                    )}>
-                        
+                 <div className="relative w-full h-full flex items-center justify-center z-10">
+                    <div className={clsx("relative w-full transition-all group flex items-center justify-center", aspectClass)}>
                         {/* Image Display */}
                         {scene.imageUrl && (
                             <img 
                                 src={`data:image/png;base64,${scene.imageUrl}`} 
-                                className={clsx("w-full h-full object-contain", (videoUrls.length > 0 && !showImage) ? "opacity-50" : "opacity-100")} 
+                                className="w-full h-full object-contain block" 
                                 alt={`Scene ${scene.sceneNumber}`}
                             />
                         )}
 
-                        {/* Video Overlay/Display */}
-                        {videoUrls.length > 0 && !showImage && (
-                            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center group/video">
-                                {videoUrls.slice(0, 1).map((url, idx) => (
-                                    <div key={idx} className="relative bg-black/20 w-full h-full flex items-center justify-center">
-                                        <video 
-                                            src={url} 
-                                            controls 
-                                            className="w-full h-full object-contain shadow-2xl"
-                                            autoPlay={idx === 0}
-                                            loop
-                                            muted
-                                        />
-                                        {/* Video Controls Overlay */}
-                                        <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover/video:opacity-100 transition-opacity z-30">
-                                            <button 
-                                                onClick={() => onEnlarge(url, 'video')} 
-                                                className="bg-white/90 border-2 border-black p-2 hover:bg-white transition-colors shadow-md"
-                                                title="全屏查看"
-                                            >
-                                                <Maximize2 size={20} />
-                                            </button>
-                                            <button 
-                                                onClick={() => setShowImage(true)}
-                                                className="bg-[#FACC15]/90 border-2 border-black p-2 hover:bg-[#FACC15] transition-colors shadow-md"
-                                                title="隐藏视频，显示分镜"
-                                            >
-                                                <Archive size={20} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
                         {/* Generation Overlays */}
-                        {scene.isGeneratingVideo && (
-                             <div className="absolute inset-0 bg-black/70 z-30 flex flex-col items-center justify-center text-center p-4">
-                                    {/* Stop Button */}
-                                    {onCancelVideo && (
-                                        <button 
-                                            onClick={onCancelVideo}
-                                            className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full border-2 border-white shadow-md z-50 transition-transform hover:scale-110"
-                                            title="Stop Video Generation"
-                                        >
-                                            <X size={24} strokeWidth={3} />
-                                        </button>
-                                    )}
-                                    <RefreshCw className="animate-spin text-[#FACC15] mb-4" size={48} />
-                                    <span className="font-bangers text-white text-3xl tracking-wider uppercase">GENERATING {videoModel.replace('_', ' ').replace('-fast', '').toUpperCase()}...</span>
-                                    <p className="text-gray-300 font-sans font-normal mt-2 text-sm">THIS MAY TAKE A FEW MINUTES</p>
-                                </div>
-                        )}
                         {scene.isGeneratingImage && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50 z-20 border-2 border-black">
                                 <RefreshCw className="animate-spin text-black mb-2" size={32} />
-                                <span className="font-bangers text-black text-xl animate-pulse">DRAWING...</span>
+                                <span className="font-bangers text-black text-xl animate-pulse">正在绘制...</span>
                             </div>
                         )}
                         
-                        {/* Hover Overlay Controls (Only for Image) */}
-                        {!scene.isGeneratingVideo && scene.imageUrl && (
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex flex-col items-center justify-center gap-3 p-4">
-                                {/* Top Right Toggle Button (if video exists) */}
-                                {videoUrls.length > 0 && showImage && (
-                                    <div className="absolute top-4 right-4 z-30">
-                                        <button 
-                                            onClick={() => setShowImage(false)}
-                                            className="bg-[#10B981]/90 border-2 border-black p-2 hover:bg-[#10B981] text-white transition-colors shadow-md"
-                                            title="显示视频"
-                                        >
-                                            <Film size={20} />
-                                        </button>
-                                    </div>
+                        {/* Top-Right Icon Controls */}
+                        {!scene.isGeneratingImage && (
+                            <div className="absolute top-2 right-2 flex gap-2 z-50">
+                                {scene.imageUrl && (
+                                    <button onClick={() => onEnlarge(scene.imageUrl!, 'image')} className="bg-black/60 text-white border border-white/40 p-1.5 hover:bg-[#FACC15] hover:text-black transition-colors rounded-sm" title="放大">
+                                        <Maximize2 size={18} />
+                                    </button>
                                 )}
-                                <div className="flex gap-2">
-                                    <button onClick={() => onEnlarge(scene.imageUrl!, 'image')} className="bg-white border-2 border-black p-3 hover:bg-gray-100 transform hover:scale-110 transition-transform" title="放大">
-                                        <Maximize2 size={24} />
+                                {scene.imageUrl && (
+                                    <button 
+                                        onClick={() => {
+                                            setIsEditingInstruction(!isEditingInstruction);
+                                            setIsEditingPrompt(false);
+                                        }} 
+                                        className={clsx(
+                                            "border border-white/40 p-1.5 transition-colors rounded-sm",
+                                            isEditingInstruction ? "bg-[#FACC15] text-black" : "bg-black/60 text-white hover:bg-[#FACC15] hover:text-black"
+                                        )} 
+                                        title="编辑"
+                                    >
+                                        <Edit2 size={18} />
                                     </button>
-                                    <button onClick={onDownload} className="bg-[#FACC15] border-2 border-black p-3 hover:bg-[#EAB308] transform hover:scale-110 transition-transform" title="下载图片">
-                                        <Download size={24} />
-                                    </button>
-                                </div>
-                                <div className="flex flex-wrap justify-center gap-2">
-                                    <button onClick={onEditImage} className="bg-[#A78BFA] border-2 border-black px-4 py-2 font-normal tracking-wide text-white hover:bg-[#8B5CF6] flex items-center gap-2 text-xl">
-                                        <Wand2 size={20} /> 编辑
-                                    </button>
-                                    <button onClick={() => fileRef.current?.click()} className={uploadBtnClass} title="上传新图片">
-                                        <Upload size={20} /> 上传
-                                    </button>
-                                    <button onClick={onRegenerate} className="bg-[#3B82F6] border-2 border-black px-4 py-2 font-normal tracking-wide text-white hover:bg-[#2563EB] flex items-center gap-2 text-xl">
-                                        <RefreshCw size={20} /> 重绘
-                                    </button>
-                                </div>
+                                )}
+                                <button 
+                                    onClick={() => {
+                                        setIsEditingPrompt(!isEditingPrompt);
+                                        setIsEditingInstruction(false);
+                                    }} 
+                                    className={clsx(
+                                        "border border-white/40 p-1.5 transition-colors rounded-sm",
+                                        isEditingPrompt ? "bg-[#FACC15] text-black" : "bg-black/60 text-white hover:bg-[#FACC15] hover:text-black"
+                                    )} 
+                                    title="重绘/修改"
+                                >
+                                    <RefreshCw size={18} />
+                                </button>
+                                <button onClick={() => onDeleteScene?.(index)} className="bg-black/60 text-white border border-white/40 p-1.5 hover:bg-red-500 hover:text-white transition-colors rounded-sm" title="删除此场景">
+                                    <Trash2 size={18} />
+                                </button>
                             </div>
                         )}
                         
@@ -414,20 +604,23 @@ const SceneRow: React.FC<CardProps> = ({
                             <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center border-2 border-black bg-gray-200">
                                 {scene.error ? (
                                     <>
-                                        <AlertTriangle className="text-red-500 mb-2" size={32} />
-                                        <p className="text-xs font-normal text-red-600 mb-2">{scene.error}</p>
-                                        <button onClick={onRegenerate} className="bg-red-100 border-2 border-red-500 text-red-600 px-3 py-1 font-normal text-xs uppercase hover:bg-red-200">重试</button>
+                                        <AlertTriangle className="text-red-500 mb-2" size={24} />
+                                        <p className="text-[10px] font-normal text-red-600 mb-2 leading-tight">{scene.error}</p>
+                                        <button onClick={onRegenerate} className="bg-red-100 border-2 border-red-500 text-red-600 px-2 py-1 font-normal text-[10px] uppercase hover:bg-red-200">重试</button>
                                     </>
                                 ) : (
                                     <>
-                                        <ImagePlus className="text-gray-400 mb-2" size={48} />
-                                        <span className="text-gray-500 font-normal text-xl">无图片</span>
-                                        <div className="flex flex-wrap gap-2 justify-center mt-2">
-                                            <button onClick={onRegenerate} className="bg-black text-white border-2 border-black px-4 py-2 font-normal text-xl hover:bg-gray-800 flex items-center gap-2">
-                                                <RefreshCw size={20} /> 生成
+                                        <ImagePlus className="text-gray-400 mb-2" size={32} />
+                                        <span className="text-gray-500 font-normal text-lg">无图片</span>
+                                        <div className="flex flex-wrap gap-2 justify-center mt-2 relative z-50">
+                                            <button 
+                                                onClick={() => setIsEditingPrompt(true)} 
+                                                className="bg-white text-black border-2 border-black px-3 py-1 font-normal text-lg hover:bg-gray-100 flex items-center gap-2"
+                                            >
+                                                <Edit2 size={16} /> 编辑
                                             </button>
-                                            <button onClick={() => fileRef.current?.click()} className={uploadBtnClass}>
-                                                <Upload size={20} /> 上传
+                                            <button onClick={onRegenerate} className="bg-black text-white border-2 border-black px-3 py-1 font-normal text-lg hover:bg-gray-800 flex items-center gap-2">
+                                                <RefreshCw size={16} /> 生成
                                             </button>
                                         </div>
                                     </>
@@ -435,210 +628,74 @@ const SceneRow: React.FC<CardProps> = ({
                             </div>
                         )}
                         
-                        <div className="absolute top-0 left-0 bg-black text-white px-3 py-1 font-normal text-lg z-40">
-                            场景 {String(scene.sceneNumber).padStart(2,'0')}
-                        </div>
-                     </div>
-                 </div>
-                 <input type="file" ref={fileRef} className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} />
-            </div>
-            
-            {/* Right Column: Content & Actions (Fixed Width) */}
-            <div className="md:w-[480px] p-6 flex flex-col gap-4 bg-white relative shrink-0">
-                <div className="flex-1 flex flex-col">
-                    <div className="flex-1 flex flex-col">
-                        {/* Redesigned Tabs - Optimized Style */}
-                        <div className="flex p-1 bg-gray-200 border-2 border-black rounded-lg mb-4">
-                            <button
-                                onClick={() => setActiveTab('script')}
-                                className={clsx(
-                                    "flex-1 py-2 text-lg font-normal flex items-center justify-center gap-2 rounded-md transition-all border-2",
-                                    activeTab === 'script' ? "bg-white border-black text-black" : "border-transparent text-gray-500 hover:text-black"
-                                )}
-                            >
-                                <FileText size={16} /> 剧本
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('visual')}
-                                className={clsx(
-                                    "flex-1 py-2 text-lg font-normal flex items-center justify-center gap-2 rounded-md transition-all border-2",
-                                    activeTab === 'visual' ? "bg-white border-black text-black" : "border-transparent text-gray-500 hover:text-black"
-                                )}
-                            >
-                                <ImageIcon size={16} /> 画面
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('video')}
-                                className={clsx(
-                                    "flex-1 py-2 text-lg font-normal flex items-center justify-center gap-2 rounded-md transition-all border-2",
-                                    activeTab === 'video' ? "bg-white border-black text-black" : "border-transparent text-gray-500 hover:text-black"
-                                )}
-                            >
-                                <Video size={16} /> 视频
-                            </button>
-                        </div>
-
-                        {activeTab === 'video' && (
-                            <div className="mb-2 text-sm text-gray-600 bg-yellow-100 p-2 border-2 border-yellow-400 rounded">
-                                💡 提示：因 veo、grok 等视频模型对中文台词的呈现效果欠佳，故视频中人物暂不设置口型动作，台词统一通过音频生成以旁白形式配音呈现。
+                        <div className="absolute top-0 left-0 flex items-center z-40">
+                            <div className="bg-black text-white px-2 py-0.5 font-normal text-sm">
+                                场景 {String(scene.sceneNumber).padStart(2,'0')}
                             </div>
-                        )}
-                        <textarea 
-                            value={
-                                activeTab === 'script' ? scene.script : 
-                                activeTab === 'visual' ? scene.visualPrompt : 
-                                activeTab === 'video' ? (scene.videoPrompt || `${scene.script}\n${scene.visualPrompt}`) : ''
-                            }
-                            onChange={(e) => {
-                                if (activeTab === 'script') onUpdateScript(index, e.target.value);
-                                else if (activeTab === 'visual') onUpdatePrompt(index, e.target.value, 'en');
-                                else if (activeTab === 'video') {
-                                    onUpdateVideoPrompt && onUpdateVideoPrompt(index, e.target.value);
-                                }
-                            }}
-                            className="w-full bg-yellow-50 border-2 border-black p-4 text-lg font-medium font-sans resize-none flex-1 min-h-[500px] outline-none focus:bg-white transition-colors leading-relaxed"
-                            placeholder={
-                                activeTab === 'video' ? "视频生成提示词..." : ""
-                            }
-                        />
-                    </div>
-                </div>
-                
-                <div className="pt-4 border-t-2 border-gray-100 flex flex-col gap-3">
-                     <div className="flex justify-between items-center mb-2">
-                        <div className="text-xs font-normal text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                            {aspectRatio} / {videoModel.toUpperCase().replace('-FAST','')}
                         </div>
-                     </div>
 
-                     <div className="flex gap-2 items-center">
-                        <div className="relative flex-shrink-0">
-                            {isVeo || isGrok10 || isGrok15 ? (
-                                <div className="bg-white border-2 border-black px-3 py-3 font-normal text-lg h-full flex items-center justify-center min-w-[60px]">
-                                    {selectedDuration}s
-                                </div>
-                            ) : (
-                                <>
-                                    <select 
-                                        value={selectedDuration}
-                                        onChange={(e) => setSelectedDuration(Number(e.target.value) as 8 | 10 | 15)}
-                                        className="appearance-none bg-white border-2 border-black px-3 py-3 pr-8 font-normal text-lg focus:outline-none cursor-pointer hover:bg-gray-50 h-full"
+                        {/* Inline Instruction Box (Inside image area at bottom) */}
+                        {isEditingInstruction && (
+                            <div ref={editBoxRef} className="absolute bottom-0 left-0 right-0 bg-black/80 p-3 text-white z-50 backdrop-blur-md border-t border-white/20 animate-in slide-in-from-bottom duration-200">
+                                <textarea 
+                                    value={localInstruction}
+                                    onChange={(e) => setLocalInstruction(e.target.value)}
+                                    placeholder="输入修改指令，例如：让角色笑得更开心..."
+                                    className="w-full bg-white/10 border border-white/20 p-2 text-xs text-white outline-none focus:border-[#FACC15] resize-none h-20"
+                                    autoFocus
+                                />
+                                <div className="flex justify-end gap-6 mt-2">
+                                    <button 
+                                        onClick={() => setIsEditingInstruction(false)}
+                                        className="text-xs text-white hover:text-[#FACC15] hover:scale-105 transition-all"
                                     >
-                                        {getValidDurations(videoModel).map(d => (
-                                            <option key={d} value={d}>{d}s</option>
-                                        ))}
-                                    </select>
-                                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" size={16} />
-                                </>
-                            )}
-                        </div>
-                        
-                        <button 
-                            onClick={() => onGenerateVideo(selectedDuration)}
-                            disabled={scene.isGeneratingVideo || !scene.imageUrl}
-                            className={clsx(
-                                "flex-1 px-4 py-3 font-normal tracking-wide text-white flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-lg",
-                                videoUrls.length > 0 ? "bg-[#10B981] hover:bg-[#059669] border-2 border-black" : "bg-black hover:bg-gray-800 border-2 border-black"
-                            )}
-                        >
-                            {scene.isGeneratingVideo ? <RefreshCw className="animate-spin" size={20} /> : (videoUrls.length > 0 ? <PlayCircle size={20} /> : <Film size={20} />)}
-                            {scene.isGeneratingVideo ? '制作中...' : (videoUrls.length > 0 ? '重新生成' : '生成视频')}
-                        </button>
-                     </div>
-                     
-                     {videoUrls.length > 0 && !scene.isGeneratingVideo && (
-                         <div className="space-y-2 mt-2">
-                            {videoUrls.map((url, i) => (
-                                <a 
-                                    key={i}
-                                    href={url}
-                                    download={`scene_${scene.sceneNumber}_v${i+1}.mp4`}
-                                    className="w-full flex items-center justify-center gap-2 bg-[#FACC15] hover:bg-[#EAB308] border-2 border-black py-2 font-normal tracking-wide text-black text-lg transition-colors uppercase"
-                                >
-                                    <Download size={18} /> 下载视频 V.{i+1}
-                                </a>
-                            ))}
-                         </div>
-                     )}
-                </div>
-            </div>
-            </div>
+                                        取消
+                                    </button>
+                                    <button 
+                                        onClick={handleInstructionSubmit}
+                                        disabled={!localInstruction.trim()}
+                                        className="text-xs text-white hover:text-[#FACC15] hover:scale-105 transition-all font-normal disabled:opacity-50"
+                                    >
+                                        执行修改
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
-            {/* Audio Section */}
-            <div className="border-t-4 border-black p-2 bg-gray-50 flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                    <Music className="text-[#FACC15]" size={20} />
-                    <h4 className="font-normal text-lg tracking-wide">音频生成</h4>
-                </div>
-                <div className="flex flex-col gap-2 border-2 border-black p-2 bg-white">
-                    <div className="flex gap-2">
-                        {/* Speaker A */}
-                        <div className="flex-1 flex flex-col gap-2">
-                            <div className="flex gap-2">
-                                <input type="text" value={speakerA.name} onChange={(e) => setSpeakerA({...speakerA, name: e.target.value})} placeholder="角色 A" className="border-2 border-black p-1 flex-1 font-normal text-lg tracking-wide" />
-                                <select value={speakerA.voice} onChange={(e) => setSpeakerA({...speakerA, voice: e.target.value})} className="border-2 border-black p-1 font-normal text-lg tracking-wide">
-                                    {VOICES.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                                </select>
+                        {/* Inline Redraw Box (Same style as instruction box) */}
+                        {isEditingPrompt && (
+                            <div ref={redrawBoxRef} className="absolute bottom-0 left-0 right-0 bg-black/80 p-3 text-white z-50 backdrop-blur-md border-t border-white/20 animate-in slide-in-from-bottom duration-200 flex flex-col gap-2">
+                                <textarea 
+                                    value={localScript}
+                                    onChange={(e) => setLocalScript(e.target.value)}
+                                    placeholder="修改剧本/动作..."
+                                    className="w-full bg-white/10 border border-white/20 p-2 text-xs text-white outline-none focus:border-[#FACC15] resize-none h-16"
+                                />
+                                <textarea 
+                                    value={localPrompt}
+                                    onChange={(e) => setLocalPrompt(e.target.value)}
+                                    placeholder="修改绘画提示词..."
+                                    className="w-full bg-white/10 border border-white/20 p-2 text-xs text-white outline-none focus:border-[#FACC15] resize-none h-20"
+                                    autoFocus
+                                />
+                                <div className="flex justify-end gap-6 mt-1">
+                                    <button 
+                                        onClick={() => setIsEditingPrompt(false)}
+                                        className="text-xs text-white hover:text-[#FACC15] hover:scale-105 transition-all"
+                                    >
+                                        取消
+                                    </button>
+                                    <button 
+                                        onClick={handleRegenerateSubmit}
+                                        className="text-xs text-white hover:text-[#FACC15] hover:scale-105 transition-all font-normal"
+                                    >
+                                        确认重绘
+                                    </button>
+                                </div>
                             </div>
-                            <textarea
-                                value={speakerA.prompt}
-                                onChange={(e) => setSpeakerA({...speakerA, prompt: e.target.value})}
-                                placeholder="角色 A 提示词..."
-                                className="w-full bg-yellow-50 border-2 border-black p-2 text-lg font-medium font-sans resize-none h-32 outline-none focus:bg-white transition-colors"
-                            />
-                        </div>
-                        {/* Speaker B */}
-                        <div className="flex-1 flex flex-col gap-2">
-                            <div className="flex gap-2">
-                                <input type="text" value={speakerB.name} onChange={(e) => setSpeakerB({...speakerB, name: e.target.value})} placeholder="角色 B" className="border-2 border-black p-1 flex-1 font-normal text-lg tracking-wide" />
-                                <select value={speakerB.voice} onChange={(e) => setSpeakerB({...speakerB, voice: e.target.value})} className="border-2 border-black p-1 font-normal text-lg tracking-wide">
-                                    {VOICES.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                                </select>
-                            </div>
-                            <textarea
-                                value={speakerB.prompt}
-                                onChange={(e) => setSpeakerB({...speakerB, prompt: e.target.value})}
-                                placeholder="角色 B 提示词..."
-                                className="w-full bg-yellow-50 border-2 border-black p-2 text-lg font-medium font-sans resize-none h-32 outline-none focus:bg-white transition-colors"
-                            />
-                        </div>
-                    </div>
-                    {scene.audioUrl && (
-                        <div className="flex items-center gap-2">
-                            <audio controls src={scene.audioUrl} className="flex-1 h-8" />
-                        </div>
-                    )}
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => onGenerateAudio(
-                                `${speakerA.name}: ${speakerA.prompt}\n${speakerB.name}: ${speakerB.prompt}`, 
-                                {
-                                    multiSpeakerVoiceConfig: {
-                                        speakerVoiceConfigs: [
-                                            { speaker: speakerA.name, voiceName: speakerA.voice },
-                                            { speaker: speakerB.name, voiceName: speakerB.voice }
-                                        ]
-                                    }
-                                }
-                            )}
-                            disabled={scene.isGeneratingAudio || (!speakerA.prompt?.trim() && !speakerB.prompt?.trim())}
-                            className="flex-1 bg-[#FACC15] border-2 border-black py-2 font-normal text-lg hover:bg-[#EAB308] disabled:opacity-50 transition-colors flex justify-center items-center gap-2"
-                        >
-                            {scene.isGeneratingAudio ? <RefreshCw className="animate-spin" size={20} /> : (scene.audioUrl ? <RefreshCw size={20} /> : <PlayCircle size={20} />)}
-                            {scene.isGeneratingAudio ? '生成中...' : (scene.audioUrl ? '重新生成' : '生成音频')}
-                        </button>
-                        {scene.audioUrl && (
-                            <a 
-                                href={scene.audioUrl} 
-                                download={`scene-${scene.sceneNumber}-audio.wav`}
-                                className="bg-[#FACC15] hover:bg-[#EAB308] text-black p-2 border-2 border-black transition-all flex items-center justify-center flex-1 font-normal text-lg"
-                                title="下载音频"
-                            >
-                                <Download size={24} className="mr-2" /> 下载音频
-                            </a>
                         )}
                     </div>
-                </div>
+                 </div>
             </div>
         </div>
     );
