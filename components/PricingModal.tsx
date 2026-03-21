@@ -1,6 +1,6 @@
 import React from 'react';
 import { X, BadgeDollarSign } from 'lucide-react';
-import { agentConfig } from '../agentConfig';
+import { proxyConfig as agentConfig } from '../src/proxyConfig';
 
 interface PricingModalProps {
   onClose: () => void;
@@ -76,7 +76,7 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose }) => {
                 { name: 'Veo-3.1-4K', price: `${p(0.357)}/条` },
                 { name: 'Veo3.1-Fast', price: `${p(0.490)}/条` },
                 { name: 'Veo3.1', price: `${p(0.490)}/条` },
-                { name: 'Grok-Video-3 (10s)', price: `${p(0.140)}/10秒` },
+                { name: 'Grok-Video-3 (10s)', price: `${p(0.280)}/10秒` },
                 { name: 'Grok-Video-3 (15s)', price: `${p(0.350)}/15秒` },
                 { name: 'Sora-2', price: `${p(0.140)}/条` },
               ].map(m => (

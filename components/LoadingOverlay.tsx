@@ -29,7 +29,7 @@ const LoadingOverlay: React.FC<Props> = ({ message, onCancel }) => {
           {onCancel && (
             <button 
                 onClick={onCancel}
-                className="absolute top-3 right-3 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full border-2 border-black shadow-md z-50 transition-transform hover:scale-110 active:scale-95 cursor-pointer"
+                className="absolute top-3 right-3 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full border-2 border-black z-50 transition-transform hover:scale-110 active:scale-95 cursor-pointer"
                 title="Stop / Cancel"
             >
                 <X size={24} strokeWidth={3} />

@@ -21,13 +21,13 @@ const ScriptReview: React.FC<Props> = ({
     <div className="space-y-10 animate-fade-in pb-20 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row justify-between items-end border-b-4 border-black pb-6 gap-6">
         <div className="space-y-3">
-            <h2 className="text-6xl font-bangers text-white uppercase tracking-wider drop-shadow-[4px_4px_0_#000]">Step 3. Visuals</h2>
+            <h2 className="text-6xl font-bangers text-white uppercase tracking-wider">Step 3. Visuals</h2>
             <p className="text-white text-xl font-normal bg-black inline-block px-4 py-1 transform -skew-x-12 border-2 border-white">在生成图片前微调提示词。</p>
         </div>
         <button
           onClick={onConfirm}
           disabled={isGenerating}
-          className="flex items-center gap-3 bg-[#EF4444] hover:bg-[#DC2626] border-2 border-black text-white px-10 py-4 font-bangers text-2xl tracking-wide uppercase comic-shadow hover:-translate-y-1 transition-all disabled:opacity-50"
+          className="flex items-center gap-3 bg-[#EF4444] hover:bg-[#DC2626] border-2 border-black text-white px-10 py-4 font-bangers text-2xl tracking-wide uppercase hover:-translate-y-1 transition-all disabled:opacity-50"
         >
           {isGenerating ? 'GENERATING...' : 'DRAW STORYBOARD'}
           {!isGenerating && <Zap size={24} fill="currentColor" />}
@@ -75,7 +75,7 @@ const AssetToolbar: React.FC<{
                 onClick={() => onInsert(item.name)} 
                 className={clsx(
                     "px-3 py-1 text-xs font-bold border-2 border-black uppercase transition-all",
-                    hasImage ? `${bgClass} text-black hover:brightness-110 comic-shadow-sm` : "bg-white border-dashed text-gray-500 hover:text-black"
+                    hasImage ? `${bgClass} text-black hover:brightness-110` : "bg-white border-dashed text-gray-500 hover:text-black"
                 )} 
                 title={hasImage ? "Insert & Reference" : "Insert Text Only"}
             >
@@ -104,7 +104,7 @@ const SceneCard: React.FC<CardProps> = ({ scene, index, assets, onUpdateRef, onU
     };
 
     return (
-        <div className="bg-white border-4 border-black comic-shadow-lg p-0 relative overflow-hidden group">
+        <div className="bg-white border-4 border-black p-0 relative overflow-hidden group">
             <div className="bg-black text-white px-6 py-2 border-b-4 border-black flex justify-between items-center">
                  <span className="font-bangers text-2xl">SCENE {String(scene.sceneNumber).padStart(2, '0')}</span>
             </div>
@@ -120,7 +120,7 @@ const SceneCard: React.FC<CardProps> = ({ scene, index, assets, onUpdateRef, onU
                             onUpdateScript(index, e.target.value);
                             onUpdatePrompt(index, e.target.value, 'en');
                         }}
-                        className="w-full bg-yellow-50 border-2 border-black text-black text-lg p-5 font-comic outline-none focus:bg-white resize-none leading-relaxed comic-shadow-sm h-48" 
+                        className="w-full bg-yellow-50 border-2 border-black text-black text-lg p-5 font-comic outline-none focus:bg-white resize-none leading-relaxed h-48" 
                         placeholder="Describe the visual action here..."
                     />
                   </div>

@@ -3,7 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ViVa AI 短视频助手</title>
+    <title>VIVA AI动态漫</title>
+    <script>
+      // Make window.fetch writable to prevent TypeError
+      if (window.fetch) {
+        const originalFetch = window.fetch;
+        Object.defineProperty(window, 'fetch', {
+          value: originalFetch,
+          writable: true,
+          configurable: true
+        });
+      }
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
@@ -29,31 +40,23 @@
         font-family: 'Inter', "PingFang SC", "Microsoft YaHei", "SimHei", "Heiti SC", sans-serif;
       }
 
-      /* Custom Scrollbar */
+      /* Hide Scrollbar */
       ::-webkit-scrollbar {
-        width: 12px;
-        height: 12px;
+        display: none;
       }
-      ::-webkit-scrollbar-track {
-        background: #000; 
-        border-left: 2px solid #333;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #FACC15; 
-        border: 2px solid #000;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #EAB308; 
+      body {
+        -ms-overflow-style: none;  /* IE and Edge */
+        scrollbar-width: none;  /* Firefox */
       }
       
       .comic-shadow {
-        box-shadow: 4px 4px 0px 0px #000;
+        box-shadow: none;
       }
       .comic-shadow-sm {
-        box-shadow: 2px 2px 0px 0px #000;
+        box-shadow: none;
       }
       .comic-shadow-lg {
-        box-shadow: 8px 8px 0px 0px #000;
+        box-shadow: none;
       }
       .comic-border {
         border: 2px solid #000;
@@ -62,6 +65,13 @@
          background-image: radial-gradient(circle, #000 1px, transparent 1.5px);
          background-size: 10px 10px;
          opacity: 0.1;
+      }
+      .custom-scrollbar {
+        -ms-overflow-style: none;  /* IE and Edge */
+        scrollbar-width: none;  /* Firefox */
+      }
+      .custom-scrollbar::-webkit-scrollbar {
+        display: none;
       }
       @keyframes fadeIn {
         from { opacity: 0; transform: translateY(5px); }
