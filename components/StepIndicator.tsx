@@ -32,9 +32,7 @@ const StepIndicator: React.FC<Props> = ({ currentStep, onStepClick, enabledSteps
           const Icon = step.icon;
           const isLast = idx === steps.length - 1;
 
-          const isEnabled = (isConfigConfirmed || step.id === AppStep.MODEL_CONFIG) && (enabledSteps 
-              ? enabledSteps.includes(step.id) 
-              : (idx <= currentIdx));
+          const isEnabled = true; // Allow navigation to any step as requested
 
           return (
             <React.Fragment key={step.id}>

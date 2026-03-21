@@ -519,7 +519,7 @@ export const polishScript = async (
 # 优化指南
 1. **整体结构优化**：梳理逻辑，明确“基础信息-分镜-配音-时长”结构。
 2. **分镜优化**：补充视觉细节（镜头角度、色调、光影、画面质感），确保衔接流畅，时长精准，强化画面感染力。特别注意分镜头之间的视觉逻辑连贯性（如角色手中的物品、衣着状态等在前后分镜中应保持一致，不凭空消失）。
-3. **配音文案优化**：口语化、简洁有力，标注语气、语速、重音，确保与画面精准适配。
+3. **配音文案优化**：口语化、简洁有力，标注语气、语速、重音，确保与画面精准适配。且每段配音文案（不含括号内的控制词）不要超过30个字。
 4. **文案细节优化**：强化情节紧凑性，统一文案风格，补充必要动作/环境细节。
 5. **适配性优化**：确保描述不复杂、不抽象，直接可用于制作。
 
@@ -560,7 +560,7 @@ export const optimizeScript = async (
 3. **视觉连贯性要求**：确保分镜头之间的视觉逻辑前后一致。例如：若角色在前一分镜中持有物品（如早餐、手机等），在逻辑上该物品应继续出现的后续分镜中必须明确描述，严禁物品凭空消失。
 4. 强化故事题材氛围，节奏紧凑。
 5. **配音格式要求**：必须严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。**务必完整保留剧本中的（语气标注 / 语气提示 / 节奏提示），严禁删除括号内的任何内容。**
-6. 配音文案更口语、更有画面感、情绪递进自然，不重复、不啰嗦。**如果原剧本中有明确的语气标注（如：(惊讶地)、(低声地)等），必须在优化后的配音中予以保留或根据语境合理强化。**
+6. 配音文案更口语、更有画面感、情绪递进自然，不重复、不啰嗦。且每段配音文案（不含括号内的控制词）不要超过30个字。**如果原剧本中有明确的语气标注（如：(惊讶地)、(低声地)等），必须在优化后的配音中予以保留或根据语境合理强化。**
 
 待优化剧本：
 ${script}
@@ -623,7 +623,7 @@ export const generateAllEpisodes = async (topic: string, stylePrompt: string, st
 # 生成要求
 1. 分镜：每集必须生成 ${sceneCount} 个分镜，以适配 ${duration} 的时长。确保镜头切换频繁（平均每 2-3 秒一个镜头），避免单张画面停留过久，增强动态漫的视觉观感。
 2. 节奏：每集的最后个镜头及配音留悬念
-3. 配音：口语化，情绪饱满，台词对应动作帧，方便剪辑，无冗余语句，贴合短视频传播。**务必严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。** 务必精简配音内容，确保每段配音能在 2-3 秒内读完，以匹配高频率的镜头切换。
+3. 配音：口语化，情绪饱满，台词对应动作帧，方便剪辑，无冗余语句，贴合短视频传播。**务必严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。** 务必精简配音内容，确保每段配音能在 2-3 秒内读完，以匹配高频率的镜头切换。且每段配音文案（不含括号内的控制词）不要超过30个字。
 
 # 输出要求
 请严格按照以下 JSON 格式输出，不要包含任何其他 markdown 标记或解释说明：
@@ -684,7 +684,7 @@ export const generateScriptByScenes = async (topic: string, stylePrompt: string,
 # 生成要求
 1. 分镜：本集必须生成 ${sceneCount} 个分镜，以适配 ${duration} 的时长。确保镜头切换频繁（平均每 2-3 秒一个镜头），避免单张画面停留过久，增强动态漫的视觉观感。
 2. 节奏：每集的最后个镜头及配音留悬念
-3. 配音：口语化，情绪饱满，台词对应动作帧，方便剪辑，无冗余语句，贴合短视频传播。**务必严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。** 务必精简配音内容，确保每段配音能在 2-3 秒内读完，以匹配高频率的镜头切换。
+3. 配音：口语化，情绪饱满，台词对应动作帧，方便剪辑，无冗余语句，贴合短视频传播。**务必严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。** 务必精简配音内容，确保每段配音能在 2-3 秒内读完，以匹配高频率的镜头切换。且每段配音文案（不含括号内的控制词）不要超过30个字。
 
 # 输出格式要求
 请严格按照以下格式输出：
@@ -744,7 +744,7 @@ export const generateScript = async (finalScriptText: string, styleModifier: str
     - Each entry in 'audios' must have a 'name' and a 'prompt'.
     - 'prompt' MUST include the voice acting instructions (e.g., "(语气/节奏/重音等...)") and the actual dialogue. DO NOT strip out the parentheses or the instructions within them.
     - 'name' should be "旁白" (Narrator) if it's a general voiceover, or the character's name if it's a specific character speaking.
-    - 'narration' = Combine all the "配音：" sections into one full narration text, keeping all the voice acting instructions (e.g., "(语气/节奏/重音等...)") exactly as they appear in the source script.
+    - 'narration' = Combine all the "配音：" sections into one full narration text, keeping all the voice acting instructions (e.g., "(语气/节奏/重音等...)") exactly as they appear in the source script. EACH dialogue/voiceover line MUST be separated by a newline character (\\n) so it displays one dialogue per row.
     
     Return JSON Object:
     {
@@ -762,7 +762,7 @@ export const generateScript = async (finalScriptText: string, styleModifier: str
           "globalParams": "..."
         }
       ],
-      "narration": "(语气标注) 剧本内容 1... (语气标注) 剧本内容 2..."
+      "narration": "(语气标注) 剧本内容 1...\\n(语气标注) 剧本内容 2..."
     }
     `;
     
@@ -880,7 +880,8 @@ export const generateSceneImage = async (
   aspectRatio: '9:16' | '16:9' = '16:9',
   sceneReferenceImages?: Array<{ data: string; mimeType: string } | undefined>,
   model: string = 'gemini-3.1-flash-image-preview',
-  styleModifier: string = ''
+  styleModifier: string = '',
+  previousSceneContext?: string
 ): Promise<string> => {
     const parts: any[] = [];
     // Constructed prompt handling Chinese visualPrompt gracefully
@@ -899,7 +900,13 @@ export const generateSceneImage = async (
     - Use the provided reference images for character and location consistency.
     - **Spatial Integration**: Ensure characters are naturally integrated into the environment. They should interact with the lighting, shadows, and physical elements of the scene.
     - **Perspective Consistency**: The perspective and vanishing points of the characters MUST match the perspective of the background scene perfectly.
-    - **Realistic Proportions**: Maintain accurate real-world scale and proportions between characters and their surroundings. No distorted or impossible sizes.`;
+    - **Realistic Proportions**: Maintain accurate real-world scale and proportions between characters and their surroundings. No distorted or impossible sizes.
+    - **Camera Facing**: Strictly follow the camera angle instructions. If the prompt implies facing the camera, show the front. If it implies back to camera, show the back.
+    - **Material & Object Continuity**: Pay strict attention to the materials and states of objects. If an object is described as metal, it MUST look like metal. If it is broken, show the broken state accurately.`;
+
+    if (previousSceneContext) {
+        promptInstructions += `\n    - **Contextual Continuity**: The previous scene was: "${previousSceneContext}". Ensure logical visual continuity from the previous scene (e.g., maintain exact materials, clothing damage, object states, and relative positioning).`;
+    }
     
     const addImagePart = (data: string, mimeType: string) => { parts.push({ inline_data: { mime_type: mimeType, data: data } }); };
     
