@@ -67,12 +67,7 @@ const AssetSlot: React.FC<AssetSlotProps> = ({
   const aspectClass = aspectRatio === '9:16' ? 'aspect-[9/16] w-full' : 'aspect-video w-full';
 
   return (
-    <div className="bg-white border-4 border-dashed border-[#10B981] p-4 flex flex-col gap-4 relative group hover:border-solid transition-all duration-200">
-       {/* Badge */}
-       <div className="absolute -top-3 -left-3 bg-[#10B981] border-2 border-black text-white px-3 py-0.5 transform -rotate-2 font-bangers tracking-wider text-sm z-10">
-          {type === 'character' ? 'CAST MEMBER' : 'LOCATION'}
-       </div>
-
+    <div className="bg-white border-4 border-dashed border-[#10B981] p-2 flex flex-col gap-2 relative group hover:border-solid transition-all duration-200">
       <div 
         className={`${aspectClass} border-2 border-black bg-gray-100 flex items-center justify-center overflow-hidden relative`}
       >
@@ -156,17 +151,16 @@ const AssetSlot: React.FC<AssetSlotProps> = ({
         <input type="file" ref={inputRef} className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} />
       </div>
       
-      <div className="flex items-center gap-2">
-          <input 
-            type="text"
-            value={asset.name || ''}
-            onChange={(e) => onNameChange(e.target.value)}
-            placeholder={type === 'character' ? "NAME..." : "PLACE..."}
-            className="flex-1 min-w-0 bg-[#FFFBEB] border-2 border-black px-3 py-2 font-normal uppercase text-black focus:bg-white outline-none placeholder:text-gray-400 placeholder:normal-case"
-          />
-          <label className="flex items-center gap-1.5 text-sm font-normal cursor-pointer select-none hover:text-black text-gray-600 group/chk shrink-0">
-              <div className={clsx("w-5 h-5 border-2 border-black flex items-center justify-center transition-colors", asset.autoReference !== false ? "bg-[#10B981]" : "bg-white")}>
-                  {asset.autoReference !== false && <Check size={16} className="text-black" strokeWidth={4} />}
+      <div className="flex items-center justify-between gap-2 mt-1">
+          <span 
+            className="flex-1 min-w-0 font-bangers text-lg uppercase text-black truncate"
+            title={asset.name || (type === 'character' ? "UNNAMED" : "UNNAMED")}
+          >
+            {asset.name || (type === 'character' ? "UNNAMED" : "UNNAMED")}
+          </span>
+          <label className="flex items-center gap-1.5 text-xs font-normal cursor-pointer select-none hover:text-black text-gray-600 group/chk shrink-0">
+              <div className={clsx("w-4 h-4 border-2 border-black flex items-center justify-center transition-colors", asset.autoReference !== false ? "bg-[#10B981]" : "bg-white")}>
+                  {asset.autoReference !== false && <Check size={12} className="text-black" strokeWidth={3} />}
               </div>
               <input type="checkbox" checked={asset.autoReference !== false} onChange={(e) => onAutoReferenceChange?.(e.target.checked)} className="hidden" />
               <span className="tracking-wide">自动引用</span>
@@ -180,16 +174,27 @@ const isAssetInScene = (assetName: string, scene: Scene, isCharacter: boolean = 
   if (!assetName) return false;
   const name = assetName.toLowerCase();
   
-  if (scene.script?.toLowerCase().includes(name) ||
-      scene.visualPrompt?.toLowerCase().includes(name) ||
-      scene.videoPrompt?.toLowerCase().includes(name)) {
+  const script = (scene.script || "").toLowerCase();
+  const visual = (scene.visualPrompt || "").toLowerCase();
+  const video = (scene.videoPrompt || "").toLowerCase();
+  const character = (scene.character || "").toLowerCase();
+
+  if (script.includes(name) || visual.includes(name) || video.includes(name)) {
       return true;
   }
   
-  if (isCharacter && scene.character) {
-      const charNames = scene.character.split(/[,，、\s]+/).map(n => n.trim().toLowerCase()).filter(Boolean);
-      if (charNames.some(n => name.includes(n) || n.includes(name))) {
+  if (isCharacter) {
+      // 增强：处理集体称呼，确保“一家三口”、“一家人”、“三人”等词汇能正确关联到已定义的角色
+      const collectiveTerms = ['一家三口', '一家人', '三人', '全家人', '全家', '父母女儿', '父女', '母女', '夫妻', '一家', '三人行', '大家', '众人'];
+      if (collectiveTerms.some(term => script.includes(term) || visual.includes(term) || video.includes(term) || character.includes(term))) {
           return true;
+      }
+
+      if (scene.character) {
+          const charNames = scene.character.split(/[,，、\s]+/).map(n => n.trim().toLowerCase()).filter(Boolean);
+          if (charNames.some(n => name.includes(n) || n.includes(name))) {
+              return true;
+          }
       }
   }
   
@@ -436,27 +441,10 @@ function App() {
   }, [isStateLoaded, step, topic, selectedStylePath, selectedCategory, selectedTemplate, videoDuration, sceneCount, aspectRatio, episodesScript, scriptOptions, episodesScenes, textModel, assetModel, videoModel, audioModel, characters, coreScenes, episodesNarration, episodesAudioUrl]);
 
   // Calculate Reachable Steps
-  const enabledSteps = [AppStep.MODEL_CONFIG, AppStep.INPUT];
-  if (scriptOptions.length > 0 || draftScript) enabledSteps.push(AppStep.SCRIPT_EDIT);
-  
-  const hasAnyScenes = Object.values(episodesScenes).some(s => s && s.length > 0);
-  if (hasAnyScenes || scenes.length > 0) {
-      enabledSteps.push(AppStep.ASSETS);
-      enabledSteps.push(AppStep.STORYBOARD);
-  }
+  const enabledSteps = [AppStep.MODEL_CONFIG, AppStep.INPUT, AppStep.SCRIPT_EDIT, AppStep.ASSETS, AppStep.STORYBOARD];
 
   // Navigation Logic
   const handleStepClick = (targetStep: AppStep) => {
-    if (targetStep === AppStep.MODEL_CONFIG) { setStep(targetStep); return; }
-    if (!isConfigConfirmed) { setError("请先完成模型配置！"); return; }
-    if (targetStep === AppStep.INPUT) { setStep(targetStep); return; }
-    // Basic gatekeeping
-    if (targetStep === AppStep.SCRIPT_EDIT && scriptOptions.length === 0 && !draftScript) { setError("Please generate a script first!"); return; }
-    
-    // Allow viewing assets/storyboard if any episode has them
-    if (targetStep === AppStep.ASSETS && !hasAnyScenes && !scenes.length) { setError("Please finalize the script first!"); return; }
-    if (targetStep === AppStep.STORYBOARD && !hasAnyScenes && !scenes.length) { setError("Please finalize the script first!"); return; }
-    
     setStep(targetStep);
   };
 
@@ -637,11 +625,14 @@ function App() {
       });
   };
 
+  const currentScriptTitle = scriptOptions[currentEpisode - 1]?.title || topic;
+
   const handleDownloadAsset = (asset: AssetItem) => {
       if (!asset.data) return;
       const link = document.createElement('a');
       link.href = asset.previewUrl;
-      link.download = `${asset.name.replace(/\s+/g, '_')}_${asset.type}.png`;
+      const fileName = currentScriptTitle ? `${currentScriptTitle.replace(/\s+/g, '_')}_${asset.name.replace(/\s+/g, '_')}` : `${asset.name.replace(/\s+/g, '_')}_${asset.type}`;
+      link.download = `${fileName}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -907,7 +898,9 @@ function App() {
 
                   const sceneLocations = coreScenes.filter(s => isAssetInScene(s.name, scene, false));
                   
-                  const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt || '', sceneCharacters, sceneLocations.length > 0 ? sceneLocations : coreScenes, aspectRatio, scene.sceneReferenceImages || [], assetModel, getFullStyleModifier());
+                  const previousSceneContext = i > 0 ? (scenesWithDuration[i-1].visualPrompt || scenesWithDuration[i-1].script) : undefined;
+
+                  const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt || '', sceneCharacters, sceneLocations.length > 0 ? sceneLocations : coreScenes, aspectRatio, scene.sceneReferenceImages || [], assetModel, getFullStyleModifier(), previousSceneContext);
                   
                   if (loadingSession.current !== sessionId) return;
 
@@ -1017,8 +1010,7 @@ function App() {
 
   const handleGenerateStoryboard = async () => {
     const sessionId = ++loadingSession.current;
-    setLoading(true);
-    setLoadingMessage(`Drawing ${scenes.length} frames...`);
+    // Removed setLoading(true) to skip the "AI IS WORKING" screen
     setError(null);
     setStep(AppStep.STORYBOARD);
     
@@ -1044,7 +1036,9 @@ function App() {
 
                 const sceneLocations = coreScenes.filter(s => isAssetInScene(s.name, scene, false));
                 
-                const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt, sceneCharacters, sceneLocations.length > 0 ? sceneLocations : coreScenes, aspectRatio, scene.sceneReferenceImages || [], assetModel, getFullStyleModifier());
+                const previousSceneContext = i > 0 ? (scenes[i-1].visualPrompt || scenes[i-1].script) : undefined;
+
+                const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt || '', sceneCharacters, sceneLocations.length > 0 ? sceneLocations : coreScenes, aspectRatio, scene.sceneReferenceImages || [], assetModel, getFullStyleModifier(), previousSceneContext);
                 
                 if (loadingSession.current !== sessionId) return;
 
@@ -1073,8 +1067,6 @@ function App() {
     } catch (err: any) {
         if (loadingSession.current !== sessionId) return;
         setError('Storyboard process error: ' + err.message);
-    } finally {
-        if (loadingSession.current === sessionId) setLoading(false);
     }
   };
 
@@ -1100,7 +1092,9 @@ function App() {
 
           const sceneLocations = coreScenes.filter(s => isAssetInScene(s.name, scene, false));
 
-          const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt, sceneCharacters, sceneLocations.length > 0 ? sceneLocations : coreScenes, aspectRatio, refScenesRaw, assetModel, getFullStyleModifier());
+          const previousSceneContext = index > 0 ? (scenes[index-1].visualPrompt || scenes[index-1].script) : undefined;
+
+          const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt, sceneCharacters, sceneLocations.length > 0 ? sceneLocations : coreScenes, aspectRatio, refScenesRaw, assetModel, getFullStyleModifier(), previousSceneContext);
           setScenes(prev => {
               const next = [...prev];
               next[index] = { ...next[index], imageUrl: b64, imageHistory: [...(next[index].imageHistory || []), b64], isGeneratingImage: false };
@@ -1246,7 +1240,23 @@ function App() {
 
   const resetAppData = async () => {
       console.log("Reset button clicked - executing directly due to sandbox restrictions");
+      
+      // Preserve API tokens and related settings
+      const key1 = localStorage.getItem('viva_api_key');
+      const key2 = localStorage.getItem('viva_api_key_2');
+      const activeIndex = localStorage.getItem('viva_active_key_index');
+      const baseUrl = localStorage.getItem('viva_base_url');
+      const isConfigConfirmed = localStorage.getItem('is_config_confirmed');
+      
       localStorage.clear();
+      
+      // Restore preserved settings
+      if (key1) localStorage.setItem('viva_api_key', key1);
+      if (key2) localStorage.setItem('viva_api_key_2', key2);
+      if (activeIndex) localStorage.setItem('viva_active_key_index', activeIndex);
+      if (baseUrl) localStorage.setItem('viva_base_url', baseUrl);
+      if (isConfigConfirmed) localStorage.setItem('is_config_confirmed', isConfigConfirmed);
+      
       await clear();
       window.location.reload();
   };
@@ -1355,7 +1365,7 @@ function App() {
   const hasGeneratedStoryboardImages = scenes.some(s => !!s.imageUrl);
 
   // Dynamic Grid Class for Assets - Always use 16:9 layout for assets
-  const assetGridClass = "grid grid-cols-1 md:grid-cols-2 gap-8";
+  const assetGridClass = "grid grid-cols-1 md:grid-cols-2 gap-4";
 
   if (!isStateLoaded) return null;
 
@@ -1842,7 +1852,7 @@ function App() {
         )}
 
         {step === AppStep.INPUT && (
-          <div className="max-w-7xl mx-auto space-y-12 pb-20">
+          <div className="max-w-7xl mx-auto space-y-6 pb-10">
             <div className="text-center space-y-3 mb-12">
                 <h2 className="text-6xl font-bangers text-white uppercase tracking-wider">Step 2. The Concept</h2>
                 <p className="text-white text-xl font-normal bg-black inline-block px-4 py-1 transform -skew-x-12 border-2 border-white">选择您的创作方向</p>
@@ -1850,11 +1860,11 @@ function App() {
 
             {/* 2. Template Selection */}
             {selectedCategory && (
-                <div className="space-y-5 bg-black p-6 border-4 border-white relative mt-8">
-                     <div className="absolute -top-5 left-10 bg-white border-2 border-black px-4 py-1 font-bangers text-xl transform -rotate-1">
+                <div className="space-y-3 bg-black p-4 border-4 border-white relative mt-6">
+                     <div className="absolute -top-4 left-6 bg-white border-2 border-black px-3 py-1 font-bangers text-lg transform -rotate-1">
                         SELECT TEMPLATE ({selectedCategory.name})
                      </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3">
                         {selectedCategory.templates.map(tpl => (
                             <button 
                                 key={tpl.id} 
@@ -1875,12 +1885,12 @@ function App() {
 
             {/* 3. Visual Style Selection (Updated to VISUAL STYLE) */}
             {selectedCategory && selectedTemplate && (
-                <div className="space-y-5 bg-black p-6 border-4 border-white relative mt-8">
-                     <div className="absolute -top-5 left-10 bg-white border-2 border-black px-4 py-1 font-bangers text-xl transform -rotate-1">
+                <div className="space-y-3 bg-black p-4 border-4 border-white relative mt-6">
+                     <div className="absolute -top-4 left-6 bg-white border-2 border-black px-3 py-1 font-bangers text-lg transform -rotate-1">
                         VISUAL STYLE (视觉风格)
                      </div>
                      
-                     <div className="pt-4">
+                     <div className="pt-3">
                         {renderStyleSelection(STYLES, 0)}
                      </div>
                  </div>
@@ -1888,12 +1898,12 @@ function App() {
 
             {/* 4. Topic Input & Duration */}
             {selectedTemplate && selectedStylePath.length > 0 && (
-                <div className="space-y-5 bg-black p-6 border-4 border-white relative mt-8">
-                     <div className="absolute -top-5 left-10 bg-white border-2 border-black px-4 py-1 font-bangers text-xl transform -rotate-1 flex items-center justify-center gap-3">
+                <div className="space-y-4 bg-black p-4 border-4 border-white relative mt-6">
+                     <div className="absolute -top-4 left-6 bg-white border-2 border-black px-3 py-1 font-bangers text-lg transform -rotate-1 flex items-center justify-center gap-2">
                         <span>CREATIVE IDEA (创意想法)</span>
                      </div>
 
-                     <div className="space-y-6 pt-6">
+                     <div className="space-y-4 pt-4">
                          <div className="relative group">
                             {isGeneratingTopics ? (
                                <button 
@@ -1919,19 +1929,19 @@ function App() {
                                 onChange={(e) => setTopic(e.target.value)} 
                                 placeholder={isGeneratingTopics ? "请耐心等待..." : "左侧图标点一下，AI创意马上来"}
                                 className={clsx(
-                                    "w-full h-32 bg-white border-4 border-black py-5 px-6 text-lg font-normal font-comic outline-none resize-none text-black leading-relaxed placeholder:text-gray-400 focus:bg-yellow-50 transition-colors",
-                                    isGeneratingTopics ? "pl-52" : "pl-20"
+                                    "w-full h-24 bg-white border-4 border-black py-3 px-4 text-base font-normal font-comic outline-none resize-none text-black leading-relaxed placeholder:text-gray-400 focus:bg-yellow-50 transition-colors",
+                                    isGeneratingTopics ? "pl-48" : "pl-16"
                                 )}
                             />
                          </div>
                          
                          {topicSuggestions.length > 0 && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 {topicSuggestions.map((suggestion, idx) => (
                                     <button 
                                         key={idx}
                                         onClick={() => setTopic(suggestion)}
-                                        className="bg-white hover:bg-[#FACC15] border-2 border-black px-4 py-2 text-lg uppercase transition-colors font-normal text-left truncate"
+                                        className="bg-white hover:bg-[#FACC15] border-2 border-black px-3 py-1.5 text-base uppercase transition-colors font-normal text-left truncate"
                                     >
                                         {suggestion}
                                     </button>
@@ -1939,11 +1949,11 @@ function App() {
                             </div>
                          )}
 
-                         <div className="pt-6 grid grid-cols-1 md:grid-cols-3 gap-8 border-t-2 border-dashed border-gray-600">
+                         <div className="pt-4 grid grid-cols-1 md:grid-cols-3 gap-6 border-t-2 border-dashed border-gray-600">
                             <div>
-                                <h3 className="text-2xl font-bangers text-white mb-2 flex items-center gap-2">
-                                    <Film size={24} /> 
-                                    <span>集数 <span className="text-xl ml-1 font-normal">(Episode Count)</span></span>
+                                <h3 className="text-xl font-bangers text-white mb-2 flex items-center gap-2">
+                                    <Film size={20} /> 
+                                    <span>集数 <span className="text-lg ml-1 font-normal">(Episode Count)</span></span>
                                 </h3>
                                 <div className="relative flex items-center">
                                     <input
@@ -1952,22 +1962,22 @@ function App() {
                                         onChange={(e) => setEpisodeCount(e.target.value)}
                                         onWheel={(e) => (e.target as HTMLInputElement).blur()}
                                         placeholder="如：10"
-                                        className="w-full h-14 bg-white border-4 border-black px-6 text-2xl font-normal outline-none transition-colors hover:bg-gray-50"
+                                        className="w-full h-12 bg-white border-4 border-black px-4 text-xl font-normal outline-none transition-colors hover:bg-gray-50"
                                     />
-                                    <span className="absolute right-6 text-2xl font-bangers text-black">集</span>
+                                    <span className="absolute right-4 text-xl font-bangers text-black">集</span>
                                 </div>
                             </div>
 
                             <div>
-                                <h3 className="text-2xl font-bangers text-white mb-2 flex items-center gap-2">
-                                    <Clock size={24} /> 
-                                    <span>单集时长 <span className="text-xl ml-1 font-normal">(Episode Duration)</span></span>
+                                <h3 className="text-xl font-bangers text-white mb-2 flex items-center gap-2">
+                                    <Clock size={20} /> 
+                                    <span>单集时长 <span className="text-lg ml-1 font-normal">(Episode Duration)</span></span>
                                 </h3>
                                 <div className="relative">
                                     <select
                                         value={episodeDuration}
                                         onChange={(e) => setEpisodeDuration(e.target.value)}
-                                        className="w-full h-14 bg-white border-4 border-black px-6 text-2xl font-normal outline-none appearance-none cursor-pointer hover:bg-gray-50 uppercase"
+                                        className="w-full h-12 bg-white border-4 border-black px-4 text-xl font-normal outline-none appearance-none cursor-pointer hover:bg-gray-50 uppercase"
                                     >
                                         <option value="10–20秒">10–20秒</option>
                                         <option value="20–30秒">20–30秒</option>
@@ -1978,43 +1988,43 @@ function App() {
                                         <option value="70–80秒">70–80秒</option>
                                         <option value="80–90秒">80–90秒</option>
                                     </select>
-                                    <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-black">
-                                        <ChevronRight className="rotate-90" size={24} strokeWidth={3} />
+                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-black">
+                                        <ChevronRight className="rotate-90" size={20} strokeWidth={3} />
                                     </div>
                                 </div>
                             </div>
 
                             <div>
-                                <h3 className="text-2xl font-bangers text-white mb-2 flex items-center gap-2">
-                                    <Maximize2 size={24} /> 
-                                    <span>画面比例 <span className="text-xl ml-1 font-normal">(Aspect Ratio)</span></span>
+                                <h3 className="text-xl font-bangers text-white mb-2 flex items-center gap-2">
+                                    <Maximize2 size={20} /> 
+                                    <span>画面比例 <span className="text-lg ml-1 font-normal">(Aspect Ratio)</span></span>
                                 </h3>
                                 <div className="relative">
                                     <select
                                         value={aspectRatio}
                                         onChange={(e) => setAspectRatio(e.target.value as '9:16' | '16:9')}
-                                        className="w-full h-14 bg-white border-4 border-black px-6 text-2xl font-normal outline-none appearance-none cursor-pointer hover:bg-gray-50 uppercase"
+                                        className="w-full h-12 bg-white border-4 border-black px-4 text-xl font-normal outline-none appearance-none cursor-pointer hover:bg-gray-50 uppercase"
                                     >
                                         <option value="9:16">9:16 (VERTICAL)</option>
                                         <option value="16:9">16:9 (HORIZONTAL)</option>
                                     </select>
-                                    <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-black">
-                                        <ChevronRight className="rotate-90" size={24} strokeWidth={3} />
+                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-black">
+                                        <ChevronRight className="rotate-90" size={20} strokeWidth={3} />
                                     </div>
                                 </div>
                             </div>
                          </div>
                      </div>
                          
-                    <div className="flex justify-center pt-8 pb-4">
+                    <div className="flex justify-center pt-4 pb-2">
                         <button 
                             onClick={() => handleStartCreation()} 
                             disabled={!topic.trim() || !isStyleSelectionComplete()} 
-                            className="bg-[#EF4444] hover:bg-[#DC2626] text-white px-12 py-5 font-bangers text-3xl tracking-widest uppercase border-4 border-black hover:-translate-y-1 transition-all flex items-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                            className="bg-[#EF4444] hover:bg-[#DC2626] text-white px-8 py-3 font-bangers text-2xl tracking-widest uppercase border-4 border-black hover:-translate-y-1 transition-all flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                         >
-                            <Sparkles className="text-[#FACC15]" size={32} /> 
+                            <Sparkles className="text-[#FACC15]" size={24} /> 
                             <span>开始创作剧本</span>
-                            <ArrowRight size={32} />
+                            <ArrowRight size={24} />
                         </button>
                     </div>
                 </div>
@@ -2022,7 +2032,7 @@ function App() {
           </div>
         )}
 
-        {step === AppStep.SCRIPT_EDIT && scriptOptions.length > 0 && (
+        {step === AppStep.SCRIPT_EDIT && (
            <ScriptEditor 
                initialScript={initialScriptContent} 
                onFinalize={handleFinalizeScript} 
@@ -2039,7 +2049,7 @@ function App() {
         )}
 
         {step === AppStep.ASSETS && (
-            <div className="max-w-7xl mx-auto space-y-10 animate-fade-in pb-20">
+            <div className="max-w-7xl mx-auto px-4 space-y-10 animate-fade-in pb-20">
                  <div className="flex flex-col md:flex-row justify-between items-end border-b-4 border-black pb-6 gap-6 relative">
                     <div className="flex-1 space-y-3">
                         <div className="flex items-center gap-4">
@@ -2076,7 +2086,7 @@ function App() {
                  </div>
 
                  {/* Characters Section */}
-                 <div className="bg-[#1a1a1a] p-2">
+                 <div className="bg-[#1a1a1a] px-0 py-2">
                      <div className="flex items-center justify-between mb-6">
                          <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-[#3B82F6] text-white flex items-center justify-center border-2 border-black">
@@ -2102,7 +2112,7 @@ function App() {
                  </div>
 
                  {/* Core Scenes Section */}
-                 <div className="bg-[#1a1a1a] p-2 pt-8 border-t-4 border-dashed border-gray-700">
+                 <div className="bg-[#1a1a1a] px-0 pt-8 border-t-4 border-dashed border-gray-700">
                      <div className="flex items-center justify-between mb-6">
                          <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-[#F97316] text-white flex items-center justify-center border-2 border-black">
@@ -2152,7 +2162,7 @@ function App() {
                 aspectRatio={aspectRatio}
                 videoModel={videoModel}
                 onEditImage={handleEditSceneImage}
-                topic={topic}
+                topic={currentScriptTitle}
                 globalNarration={globalNarration}
                 globalAudioUrl={globalAudioUrl}
                 isGeneratingGlobalAudio={isGeneratingGlobalAudio}

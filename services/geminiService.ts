@@ -436,10 +436,12 @@ export const generateTopicIdeas = async (categoryName: string, templateName: str
 
 ## 创作要求：
 1. 严格贴合【${templateName}】的风格调性，比如沙雕脑洞要搞笑、修仙爽文要突出升级打脸、规则怪谈要突出诡异规则。
-2. 10 个创意方向必须差异化（比如不同主角身份、不同核心冲突、不同结局走向）。
-3. 语言要接地气，符合短视频/网文/短剧的传播特点，自带记忆点和传播潜力。
-4. 简介不要太啰嗦，重点突出“钩子”，让用户一眼就想继续看下去。
-5. 语言表达要使用生活化的大白话，避免书面语，通俗易懂。严禁在创意想法中使用第一人称（如“我”、“我们”），必须使用第三人称（如“他”、“她”、“男子”、“女孩”等）进行客观叙述。
+2. **逻辑严密性（硬性要求）**：创意点子必须符合基本逻辑，严禁出现过于幼稚、荒诞或毫无逻辑的设定（例如：“为了避开相亲，女子决定原地进化成仙人掌”等此类不合常理的幼稚想法）。
+3. **内容深度**：创意应具有一定的叙事深度和情感共鸣，避免流于表面或低幼化。即使是搞笑题材，也应建立在合理的冲突和反转之上。
+4. 10 个创意方向必须差异化（比如不同主角身份、不同核心冲突、不同结局走向）。
+5. 语言要接地气，符合短视频/网文/短剧的传播特点，自带记忆点和传播潜力。
+6. 简介不要太啰嗦，重点突出“钩子”，让用户一眼就想继续看下去。
+7. 语言表达要使用生活化的大白话，避免书面语，通俗易懂。严禁在创意想法中使用第一人称（如“我”、“我们”），必须使用第三人称（如“他”、“她”、“男子”、“女孩”等）进行客观叙述。
 
 严格输出一个 JSON 数组（不要包含任何其他 markdown 标记或解释说明），格式如下：
 [
@@ -519,7 +521,7 @@ export const polishScript = async (
 # 优化指南
 1. **整体结构优化**：梳理逻辑，明确“基础信息-分镜-配音-时长”结构。
 2. **分镜优化**：补充视觉细节（镜头角度、色调、光影、画面质感），确保衔接流畅，时长精准，强化画面感染力。特别注意分镜头之间的视觉逻辑连贯性（如角色手中的物品、衣着状态等在前后分镜中应保持一致，不凭空消失）。
-3. **配音文案优化**：口语化、简洁有力，标注语气、语速、重音，确保与画面精准适配。
+3. **配音文案优化**：口语化、简洁有力，标注语气、语速、重音，确保与画面精准适配。且每段配音文案（不含括号内的控制词）不要超过30个字。
 4. **文案细节优化**：强化情节紧凑性，统一文案风格，补充必要动作/环境细节。
 5. **适配性优化**：确保描述不复杂、不抽象，直接可用于制作。
 
@@ -556,11 +558,15 @@ export const optimizeScript = async (
         const prompt = `
 请帮我优化这篇短剧剧本，要求：
 1. **仅优化“分镜”和“配音”部分**。保持原有的“故事题材”、“视觉风格”、“剧本名称”、“剧本集数”、“单集时长”、“画面比例”等元数据完全不变。
-2. 修补所有逻辑漏洞，让分镜衔接自然，角色行为合理、动机清晰、不突兀。
-3. **视觉连贯性要求**：确保分镜头之间的视觉逻辑前后一致。例如：若角色在前一分镜中持有物品（如早餐、手机等），在逻辑上该物品应继续出现的后续分镜中必须明确描述，严禁物品凭空消失。
-4. 强化故事题材氛围，节奏紧凑。
-5. **配音格式要求**：必须严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。**务必完整保留剧本中的（语气标注 / 语气提示 / 节奏提示），严禁删除括号内的任何内容。**
-6. 配音文案更口语、更有画面感、情绪递进自然，不重复、不啰嗦。**如果原剧本中有明确的语气标注（如：(惊讶地)、(低声地)等），必须在优化后的配音中予以保留或根据语境合理强化。**
+2. **命名一致性（硬性要求）**：
+   - 检查并修正全剧所有角色的名称，确保每个角色只使用**唯一固定名称**，全程统一。
+   - 严禁对同一角色使用不同的称呼（例如：一会儿是“外卖小哥”，一会儿是“外卖小哥王强”，一会儿是“他”，一会儿是“王强”）。必须全程使用最初定义的唯一名称。
+   - 场景名称也必须保持高度一致。
+3. 修补所有逻辑漏洞，让分镜衔接自然，角色行为合理、动机清晰、不突兀。**逻辑严密性（硬性要求）**：故事逻辑必须严密，情节发展应符合常理，严禁出现过于幼稚、荒诞或毫无逻辑的设定。
+4. **视觉连贯性要求**：确保分镜头之间的视觉逻辑前后一致。例如：若角色在前一分镜中持有物品（如早餐、手机等），在逻辑上该物品应继续出现的后续分镜中必须明确描述，严禁物品凭空消失。
+5. 强化故事题材氛围，节奏紧凑。
+6. **配音格式要求**：必须严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。**务必完整保留剧本中的（语气标注 / 语气提示 / 节奏提示），严禁删除括号内的任何内容。**
+7. 配音文案更口语、更有画面感、情绪递进自然，不重复、不啰嗦。且每段配音文案（不含括号内的控制词）不要超过30个字。**如果原剧本中有明确的语气标注（如：(惊讶地)、(低声地)等），必须在优化后的配音中予以保留或根据语境合理强化。**
 
 待优化剧本：
 ${script}
@@ -607,9 +613,14 @@ export const generateAllEpisodes = async (topic: string, stylePrompt: string, st
 请确保各集之间情节连贯，故事发展有逻辑。
 
 # 核心要求（非常重要）
-1. **命名一致性**：在所有分镜和剧本中，相同的角色和场景必须使用完全一致的名称。例如：如果角色叫“小明”，则不能在其他地方称呼他为“他”或“男孩”；如果场景是“卧室”，则不能称呼为“卧房”。这些名称将直接作为绘图提示词。
-2. **故事分布**：请将整个故事合理地分布在 ${episodeCount} 集中。严禁在第 1 集就讲完整个故事。每一集都应该是故事的一个阶段，确保剧情的连贯性和悬念。
-3. **题材契合度**：严格遵循题材描述中的核心要求和风格导向。
+1. **命名一致性（硬性要求）**：
+   - 全剧所有角色必须使用**唯一固定名称**，全程统一，绝不更改。
+   - 严禁对同一角色使用不同的称呼（例如：一会儿是“外卖小哥”，一会儿是“外卖小哥王强”，一会儿是“他”，一会儿是“王强”）。必须全程使用最初定义的唯一名称。
+   - 场景名称也必须保持高度一致。例如：如果场景是“卧室”，则不能称呼为“卧房”。
+   - 这些名称将直接作为绘图提示词，任何微小的名称差异都会导致 AI 生成的形象不统一。
+2. **逻辑严密性（硬性要求）**：故事逻辑必须严密，情节发展应符合常理，严禁出现过于幼稚、荒诞或毫无逻辑的设定。
+3. **故事分布**：请将整个故事合理地分布在 ${episodeCount} 集中。严禁在第 1 集就讲完整个故事。每一集都应该是故事的一个阶段，确保剧情的连贯性和悬念。
+4. **题材契合度**：严格遵循题材描述中的核心要求和风格导向。
 
 # 核心参数
 1. 故事题材：${templateName}
@@ -623,7 +634,7 @@ export const generateAllEpisodes = async (topic: string, stylePrompt: string, st
 # 生成要求
 1. 分镜：每集必须生成 ${sceneCount} 个分镜，以适配 ${duration} 的时长。确保镜头切换频繁（平均每 2-3 秒一个镜头），避免单张画面停留过久，增强动态漫的视觉观感。
 2. 节奏：每集的最后个镜头及配音留悬念
-3. 配音：口语化，情绪饱满，台词对应动作帧，方便剪辑，无冗余语句，贴合短视频传播。**务必严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。** 务必精简配音内容，确保每段配音能在 2-3 秒内读完，以匹配高频率的镜头切换。
+3. 配音：口语化，情绪饱满，台词对应动作帧，方便剪辑，无冗余语句，贴合短视频传播。**务必严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。** 务必精简配音内容，确保每段配音能在 2-3 秒内读完，以匹配高频率的镜头切换。且每段配音文案（不含括号内的控制词）不要超过30个字。
 
 # 输出要求
 请严格按照以下 JSON 格式输出，不要包含任何其他 markdown 标记或解释说明：
@@ -669,8 +680,13 @@ export const generateScriptByScenes = async (topic: string, stylePrompt: string,
 剧本正文必须完全以“讲故事人（旁白）”的第三人称客观视角进行故事的叙述。
 
 # 核心要求（非常重要）
-1. **命名一致性**：在所有分镜和剧本中，相同的角色和场景必须使用完全一致的名称。例如：如果角色叫“小明”，则不能在其他地方称呼他为“他”或“男孩”；如果场景是“卧室”，则不能称呼为“卧房”。这些名称将直接作为绘图提示词。
-2. **题材契合度**：严格遵循题材描述中的核心要求和风格导向。
+1. **命名一致性（硬性要求）**：
+   - 全剧所有角色必须使用**唯一固定名称**，全程统一，绝不更改。
+   - 严禁对同一角色使用不同的称呼（例如：一会儿是“外卖小哥”，一会儿是“外卖小哥王强”，一会儿是“他”，一会儿是“王强”）。必须全程使用最初定义的唯一名称。
+   - 场景名称也必须保持高度一致。例如：如果场景是“卧室”，则不能称呼为“卧房”。
+   - 这些名称将直接作为绘图提示词，任何微小的名称差异都会导致 AI 生成的形象不统一。
+2. **逻辑严密性（硬性要求）**：故事逻辑必须严密，情节发展应符合常理，严禁出现过于幼稚、荒诞或毫无逻辑的设定。
+3. **题材契合度**：严格遵循题材描述中的核心要求和风格导向。
 
 # 核心参数
 1. 故事题材：${templateName}
@@ -684,7 +700,7 @@ export const generateScriptByScenes = async (topic: string, stylePrompt: string,
 # 生成要求
 1. 分镜：本集必须生成 ${sceneCount} 个分镜，以适配 ${duration} 的时长。确保镜头切换频繁（平均每 2-3 秒一个镜头），避免单张画面停留过久，增强动态漫的视觉观感。
 2. 节奏：每集的最后个镜头及配音留悬念
-3. 配音：口语化，情绪饱满，台词对应动作帧，方便剪辑，无冗余语句，贴合短视频传播。**务必严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。** 务必精简配音内容，确保每段配音能在 2-3 秒内读完，以匹配高频率的镜头切换。
+3. 配音：口语化，情绪饱满，台词对应动作帧，方便剪辑，无冗余语句，贴合短视频传播。**务必严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。** 务必精简配音内容，确保每段配音能在 2-3 秒内读完，以匹配高频率的镜头切换。且每段配音文案（不含括号内的控制词）不要超过30个字。
 
 # 输出格式要求
 请严格按照以下格式输出：
@@ -744,7 +760,7 @@ export const generateScript = async (finalScriptText: string, styleModifier: str
     - Each entry in 'audios' must have a 'name' and a 'prompt'.
     - 'prompt' MUST include the voice acting instructions (e.g., "(语气/节奏/重音等...)") and the actual dialogue. DO NOT strip out the parentheses or the instructions within them.
     - 'name' should be "旁白" (Narrator) if it's a general voiceover, or the character's name if it's a specific character speaking.
-    - 'narration' = Combine all the "配音：" sections into one full narration text, keeping all the voice acting instructions (e.g., "(语气/节奏/重音等...)") exactly as they appear in the source script.
+    - 'narration' = Combine all the "配音：" sections into one full narration text, keeping all the voice acting instructions (e.g., "(语气/节奏/重音等...)") exactly as they appear in the source script. EACH dialogue/voiceover line MUST be separated by a newline character (\\n) so it displays one dialogue per row.
     
     Return JSON Object:
     {
@@ -762,7 +778,7 @@ export const generateScript = async (finalScriptText: string, styleModifier: str
           "globalParams": "..."
         }
       ],
-      "narration": "(语气标注) 剧本内容 1... (语气标注) 剧本内容 2..."
+      "narration": "(语气标注) 剧本内容 1...\\n(语气标注) 剧本内容 2..."
     }
     `;
     
@@ -880,7 +896,8 @@ export const generateSceneImage = async (
   aspectRatio: '9:16' | '16:9' = '16:9',
   sceneReferenceImages?: Array<{ data: string; mimeType: string } | undefined>,
   model: string = 'gemini-3.1-flash-image-preview',
-  styleModifier: string = ''
+  styleModifier: string = '',
+  previousSceneContext?: string
 ): Promise<string> => {
     const parts: any[] = [];
     // Constructed prompt handling Chinese visualPrompt gracefully
@@ -899,7 +916,14 @@ export const generateSceneImage = async (
     - Use the provided reference images for character and location consistency.
     - **Spatial Integration**: Ensure characters are naturally integrated into the environment. They should interact with the lighting, shadows, and physical elements of the scene.
     - **Perspective Consistency**: The perspective and vanishing points of the characters MUST match the perspective of the background scene perfectly.
-    - **Realistic Proportions**: Maintain accurate real-world scale and proportions between characters and their surroundings. No distorted or impossible sizes.`;
+    - **Realistic Proportions**: Maintain accurate real-world scale and proportions between characters and their surroundings. No distorted or impossible sizes.
+    - **Camera Facing**: Strictly follow the camera angle instructions. If the prompt implies facing the camera, show the front. If it implies back to camera, show the back.
+    - **Material & Object Continuity**: Pay strict attention to the materials and states of objects. If an object is described as metal, it MUST look like metal. If it is broken, show the broken state accurately.
+    - **Collective Terms Mapping**: If the prompt uses collective terms like "一家三口" (family of three), "一家人" (family), or "三人" (three people), you MUST map these terms to the provided character reference images (e.g., "男子", "妻子", "女儿") to maintain visual consistency. Ensure all characters in the group match their respective reference images.`;
+
+    if (previousSceneContext) {
+        promptInstructions += `\n    - **Contextual Continuity**: The previous scene was: "${previousSceneContext}". Ensure logical visual continuity from the previous scene (e.g., maintain exact materials, clothing damage, object states, and relative positioning).`;
+    }
     
     const addImagePart = (data: string, mimeType: string) => { parts.push({ inline_data: { mime_type: mimeType, data: data } }); };
     

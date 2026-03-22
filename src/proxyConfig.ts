@@ -1,5 +1,5 @@
 export const proxyConfig = {
-  appName: "AI故事汇",
+  appName: "ViVa AI故事汇",
   baseUrl: "https://www.vivaapi.cn",
   priceCoefficient: 0.7,
   wechatSupportId: "VIVA-API",

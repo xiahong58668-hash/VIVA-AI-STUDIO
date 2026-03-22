@@ -69,7 +69,6 @@ const StoryboardGrid: React.FC<Props> = ({
   const [isRefining, setIsRefining] = useState(false);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
   const previewAudioRef = useRef<HTMLAudioElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleAIRefine = async () => {
       if (!globalNarration) return;
@@ -85,6 +84,7 @@ const StoryboardGrid: React.FC<Props> = ({
    - 必须使用第三人称讲故事者的身份，严禁出现第一人称（如“我”、“我的”）。
    - 格式严格限制为：(语气/节奏/重音等...) 文案。
    - 严禁包含数字、镜号、秒数等任何非配音内容。
+   - 必须按一段对话一排（一行）的方式显示，每段对话之间使用换行符分隔。
 4. 文案细节优化：强化情节紧凑性，统一风格，补充动作/环境细节。
 5. 格式保留：严格保持原剧本的原有格式、标注形式和规范。
 请直接输出优化后的剧本内容。`;
@@ -106,18 +106,11 @@ const StoryboardGrid: React.FC<Props> = ({
       }
   };
 
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, [globalNarration]);
-
   const handleDownloadAudio = () => {
     if (!globalAudioUrl) return;
     const link = document.createElement('a');
     link.href = globalAudioUrl;
-    link.download = `narration_${topic || 'video'}.mp3`;
+    link.download = `${topic || 'video'}_narration.mp3`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -126,7 +119,7 @@ const StoryboardGrid: React.FC<Props> = ({
   const handleDownloadImage = (base64Data: string, sceneNum: number) => {
     const link = document.createElement('a');
     link.href = `data:image/png;base64,${base64Data}`;
-    link.download = `scene_${sceneNum}.png`;
+    link.download = `${topic || 'video'}_scene_${sceneNum}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -351,17 +344,62 @@ const StoryboardGrid: React.FC<Props> = ({
              NARRATION (配音文案)
           </div>
           <div className="space-y-4">
-              <textarea 
-                  ref={textareaRef}
-                  value={globalNarration || ''}
-                  onChange={(e) => onUpdateGlobalNarration?.(e.target.value)}
-                  placeholder="（语气/节奏/重音等..）文案"
-                  className="w-full min-h-[160px] bg-white border-4 border-black py-5 px-6 text-lg font-normal font-comic outline-none resize-none overflow-hidden text-black leading-relaxed placeholder:text-gray-400 focus:bg-yellow-50 transition-colors"
-              />
-              <div className="flex flex-col gap-4">
+              <div className="space-y-2">
+                  {(globalNarration || '').split('\n').map((line, idx) => (
+                      <div key={idx} className="flex items-start gap-2 group">
+                          <textarea 
+                              value={line}
+                              onChange={(e) => {
+                                  const newLines = (globalNarration || '').split('\n');
+                                  newLines[idx] = e.target.value;
+                                  onUpdateGlobalNarration?.(newLines.join('\n'));
+                              }}
+                              onPaste={(e) => {
+                                  const pastedText = e.clipboardData.getData('text');
+                                  if (pastedText.includes('\n')) {
+                                      e.preventDefault();
+                                      const pastedLines = pastedText.split('\n').map(l => l.trim()).filter(Boolean);
+                                      if (pastedLines.length === 0) return;
+                                      const currentLines = (globalNarration || '').split('\n');
+                                      const newLines = [
+                                          ...currentLines.slice(0, idx),
+                                          currentLines[idx] + pastedLines[0],
+                                          ...pastedLines.slice(1),
+                                          ...currentLines.slice(idx + 1)
+                                      ];
+                                      onUpdateGlobalNarration?.(newLines.join('\n'));
+                                  }
+                              }}
+                              placeholder="（语气/节奏/重音等..）文案"
+                              className="flex-1 h-10 bg-white border-2 border-black py-1.5 px-4 text-lg font-normal font-comic outline-none resize-none overflow-hidden text-black leading-relaxed placeholder:text-gray-400 focus:bg-yellow-50 transition-colors"
+                          />
+                          <button
+                              onClick={() => {
+                                  const newLines = (globalNarration || '').split('\n').filter((_, i) => i !== idx);
+                                  onUpdateGlobalNarration?.(newLines.join('\n'));
+                              }}
+                              className="mt-1.5 p-2 text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                              title="删除此行"
+                          >
+                              <Trash2 size={18} />
+                          </button>
+                      </div>
+                  ))}
+                  <button
+                      onClick={() => {
+                          const newLines = [...(globalNarration || '').split('\n'), ''];
+                          onUpdateGlobalNarration?.(newLines.join('\n'));
+                      }}
+                      className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors py-2"
+                  >
+                      <Plus size={18} />
+                      <span>添加一行配音</span>
+                  </button>
+              </div>
+              <div className="flex flex-col gap-4 pt-4 border-t-2 border-gray-800">
                   <div className="flex flex-wrap items-center justify-between gap-4">
                       <div className="flex-1 flex items-center gap-4">
-                          <div className="relative w-48 shrink-0">
+                          <div className="relative w-[270px] shrink-0">
                               <select 
                                 value={selectedVoice}
                                 onChange={(e) => setSelectedVoice(e.target.value)}

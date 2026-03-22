@@ -1,5 +1,5 @@
 {
-  "name": "AI故事汇",
+  "name": "ViVa AI故事汇",
   "description": "基于 Gemini 3.1 Pro 和 Nano Banana 的 VIVA AI 动态漫全流程制作工具。支持剧本生成、分镜绘制、全局解说配音，助力打造高品质动态漫作品。",
   "requestFramePermissions": []
 }
