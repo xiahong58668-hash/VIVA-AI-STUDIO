@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { Scene, AssetItem, VideoModel } from '../types';
 import { getValidDurations, VOICES } from '../constants';
-import { RefreshCw, Download, Maximize2, Wand2, X, Archive, AlertTriangle, ImagePlus, Edit2, Edit3, Upload, Film, Trash2, LayoutGrid, PlayCircle, Clapperboard, ChevronDown, Layers, Clock, Zap, FileText, Image as ImageIcon, Video, List, Music, Plus, Sparkles } from 'lucide-react';
+import { RefreshCw, Download, Maximize2, Wand2, X, Archive, AlertTriangle, ImagePlus, Edit2, Edit3, Upload, Film, Trash2, LayoutGrid, PlayCircle, Clapperboard, ChevronDown, ChevronUp, Layers, Clock, Zap, FileText, Image as ImageIcon, Video, List, Music, Plus, Sparkles } from 'lucide-react';
 import { clsx } from 'clsx';
 import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
@@ -36,6 +36,7 @@ interface Props {
   globalAudioUrl?: string;
   isGeneratingGlobalAudio?: boolean;
   onUpdateGlobalNarration?: (narration: string) => void;
+  onUpdateNarration?: (sceneIndex: number, newNarration: string) => void;
   onGenerateGlobalAudio?: (voiceName: string) => void;
   onInsertScene?: (index: number) => void;
   onDeleteScene?: (index: number) => void;
@@ -53,6 +54,7 @@ const StoryboardGrid: React.FC<Props> = ({
     globalAudioUrl,
     isGeneratingGlobalAudio,
     onUpdateGlobalNarration,
+    onUpdateNarration,
     onGenerateGlobalAudio,
     onInsertScene,
     onDeleteScene,
@@ -333,6 +335,8 @@ const StoryboardGrid: React.FC<Props> = ({
                       onEditImage={onEditImage}
                       onInsertScene={onInsertScene}
                       onDeleteScene={onDeleteScene}
+                      globalNarration={globalNarration}
+                      onUpdateNarration={onUpdateNarration}
                   />
               ))}
           </div>
@@ -501,11 +505,14 @@ interface SceneImageCardProps {
     onEditImage?: (index: number, instruction: string) => void;
     onInsertScene?: (index: number) => void;
     onDeleteScene?: (index: number) => void;
+    globalNarration?: string;
+    onUpdateNarration?: (index: number, newNarration: string) => void;
 }
 
 const SceneImageCard: React.FC<SceneImageCardProps> = ({ 
     scene, index, aspectRatio, onRegenerate, onUpdatePrompt, onUpdateScript,
-    onEnlarge, onDownload, onUpload, onEditImage, onInsertScene, onDeleteScene
+    onEnlarge, onDownload, onUpload, onEditImage, onInsertScene, onDeleteScene,
+    globalNarration, onUpdateNarration
 }) => {
     const fileRef = useRef<HTMLInputElement>(null);
     const editBoxRef = useRef<HTMLDivElement>(null);
@@ -514,7 +521,8 @@ const SceneImageCard: React.FC<SceneImageCardProps> = ({
     const [isEditingPrompt, setIsEditingPrompt] = useState(false);
     const [localInstruction, setLocalInstruction] = useState('');
     const [localPrompt, setLocalPrompt] = useState(scene.visualPromptZh || scene.visualPrompt || '');
-    const [localScript, setLocalScript] = useState(scene.script || '');
+    const sceneNarration = globalNarration ? globalNarration.split('\n')[index] || '' : '';
+    const [localNarration, setLocalNarration] = useState(sceneNarration);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -537,9 +545,9 @@ const SceneImageCard: React.FC<SceneImageCardProps> = ({
     useEffect(() => {
         if (isEditingPrompt) {
             setLocalPrompt(scene.visualPromptZh || scene.visualPrompt || '');
-            setLocalScript(scene.script || '');
+            setLocalNarration(sceneNarration);
         }
-    }, [isEditingPrompt, scene.visualPromptZh, scene.visualPrompt, scene.script]);
+    }, [isEditingPrompt, scene.visualPromptZh, scene.visualPrompt, sceneNarration]);
 
     const aspectClass = aspectRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video';
 
@@ -555,8 +563,8 @@ const SceneImageCard: React.FC<SceneImageCardProps> = ({
         if (localPrompt !== (scene.visualPromptZh || scene.visualPrompt)) {
             onUpdatePrompt(index, localPrompt, 'zh');
         }
-        if (localScript !== scene.script && onUpdateScript) {
-            onUpdateScript(index, localScript);
+        if (localNarration !== sceneNarration && onUpdateNarration) {
+            onUpdateNarration(index, localNarration);
         }
         onRegenerate();
         setIsEditingPrompt(false);
@@ -672,6 +680,25 @@ const SceneImageCard: React.FC<SceneImageCardProps> = ({
                             </div>
                         </div>
 
+                        {/* Collapsible Prompt and Narration */}
+                        {!isEditingInstruction && !isEditingPrompt && (
+                            <div className="absolute bottom-0 left-0 right-0 z-30 flex flex-col justify-end overflow-hidden pointer-events-none" style={{ maxHeight: '100%' }}>
+                                <div className="bg-black/80 backdrop-blur-sm text-white text-xs p-2 transform translate-y-[calc(100%-28px)] group-hover:translate-y-0 transition-transform duration-300 ease-in-out pointer-events-auto border-t border-white/20">
+                                    <div className="text-center text-gray-300 mb-1 flex justify-center items-center gap-1">
+                                        <ChevronUp size={14} className="group-hover:rotate-180 transition-transform duration-300" />
+                                        <span className="font-bold tracking-wider">查看提示词与配音</span>
+                                        <ChevronUp size={14} className="group-hover:rotate-180 transition-transform duration-300" />
+                                    </div>
+                                    <div className="max-h-[150px] overflow-y-auto custom-scrollbar opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-100">
+                                        <div className="font-bold text-[#FACC15] mb-1">分镜提示词:</div>
+                                        <div className="mb-2 leading-relaxed text-gray-200">{scene.visualPromptZh || scene.visualPrompt}</div>
+                                        <div className="font-bold text-[#FACC15] mb-1">配音文案:</div>
+                                        <div className="leading-relaxed text-gray-200">{sceneNarration}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Inline Instruction Box (Inside image area at bottom) */}
                         {isEditingInstruction && (
                             <div ref={editBoxRef} className="absolute bottom-0 left-0 right-0 bg-black/80 p-3 text-white z-50 backdrop-blur-md border-t border-white/20 animate-in slide-in-from-bottom duration-200">
@@ -704,17 +731,17 @@ const SceneImageCard: React.FC<SceneImageCardProps> = ({
                         {isEditingPrompt && (
                             <div ref={redrawBoxRef} className="absolute bottom-0 left-0 right-0 bg-black/80 p-3 text-white z-50 backdrop-blur-md border-t border-white/20 animate-in slide-in-from-bottom duration-200 flex flex-col gap-2">
                                 <textarea 
-                                    value={localScript}
-                                    onChange={(e) => setLocalScript(e.target.value)}
-                                    placeholder="修改剧本/动作..."
-                                    className="w-full bg-white/10 border border-white/20 p-2 text-xs text-white outline-none focus:border-[#FACC15] resize-none h-16"
-                                />
-                                <textarea 
                                     value={localPrompt}
                                     onChange={(e) => setLocalPrompt(e.target.value)}
                                     placeholder="修改绘画提示词..."
-                                    className="w-full bg-white/10 border border-white/20 p-2 text-xs text-white outline-none focus:border-[#FACC15] resize-none h-20"
+                                    className="w-full bg-white/10 border border-white/20 p-2 text-xs text-white outline-none focus:border-[#FACC15] resize-none h-16"
                                     autoFocus
+                                />
+                                <textarea 
+                                    value={localNarration}
+                                    onChange={(e) => setLocalNarration(e.target.value)}
+                                    placeholder="修改配音文案..."
+                                    className="w-full bg-white/10 border border-white/20 p-2 text-xs text-white outline-none focus:border-[#FACC15] resize-none h-20"
                                 />
                                 <div className="flex justify-end gap-6 mt-1">
                                     <button 

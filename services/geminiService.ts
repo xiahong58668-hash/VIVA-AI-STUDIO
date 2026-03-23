@@ -354,9 +354,9 @@ export const analyzeImageForPrompt = async (imageBytes: string): Promise<string>
   });
 };
 
-export const extractAssetsFromScript = async (script: string): Promise<{ characters: {name: string, description: string}[], scenes: {name: string, description: string}[] }> => {
+export const extractAssetsFromScript = async (script: string): Promise<{ characters: {name: string, description: string}[], scenes: {name: string, description: string}[], props: {name: string, description: string}[] }> => {
   return retryOperation(async () => {
-    const prompt = `Analyze the script and extract specific character names and core location names.
+    const prompt = `Analyze the script and extract specific character names, core location names, and key props.
     
     CRITICAL RULES for Characters:
     - ONLY extract characters that appear VISUALLY in the scenes.
@@ -377,12 +377,19 @@ export const extractAssetsFromScript = async (script: string): Promise<{ charact
     - If a location is a sub-element or part of another location, explicitly mention the parent location in its description to ensure visual consistency.
     - **EXTREMELY IMPORTANT**: Do not extract furniture or architectural details (like "床头柜", "地板", "门") as separate scenes. They should be part of the main room scene.
 
+    CRITICAL RULES for Props (道具):
+    - ONLY extract important, distinct physical objects that characters interact with or that are central to the plot.
+    - DO NOT extract generic background objects (like "墙", "地板") as props.
+    - Ensure the names of the props are unified and exactly as they appear in the script.
+    - Provide a brief Visual Description (Simplified Chinese) including color, material, size, or any specific details mentioned.
+
     For each, provide a brief Visual Description based on the script content itself.
     
     Return JSON with structure:
     { 
       "characters": [ { "name": "Name", "description": "Detailed visual details including gender, age, outfit in Simplified Chinese..." } ], 
-      "scenes": [ { "name": "Location Name", "description": "Environment details in Simplified Chinese..." } ] 
+      "scenes": [ { "name": "Location Name", "description": "Environment details in Simplified Chinese..." } ],
+      "props": [ { "name": "Prop Name", "description": "Visual details of the prop in Simplified Chinese..." } ]
     }
     Use Simplified Chinese for BOTH Names AND Descriptions.
     Script: "${script}"`;
@@ -414,7 +421,8 @@ export const extractAssetsFromScript = async (script: string): Promise<{ charact
 
     return { 
         characters: sanitize(result.characters || []), 
-        scenes: sanitize(result.scenes || []) 
+        scenes: sanitize(result.scenes || []),
+        props: sanitize(result.props || [])
     };
   });
 };
@@ -500,7 +508,7 @@ ${existingScenes.map((s, i) => `分镜 ${i + 1}: 剧本: ${s.script}, 画面: ${
 ${stylePrompt}
 
 # 输出要求
-仅输出该缺失场景的详细画面提示词，不需要任何解释。提示词必须包含：画面主体、场景、色彩、构图、视觉风格、视觉风格核心特征、镜头类型。
+仅输出该缺失场景的详细画面提示词，不需要任何解释。提示词必须包含：时间、地点、光影、画面主体、场景、色彩、构图、视觉风格、视觉风格核心特征、镜头类型。并且这些描述必须与前后分镜连贯、不冲突。
 `;
     const response = await ai.models.generateContent({
         model,
@@ -520,10 +528,11 @@ export const polishScript = async (
 
 # 优化指南
 1. **整体结构优化**：梳理逻辑，明确“基础信息-分镜-配音-时长”结构。
-2. **分镜优化**：补充视觉细节（镜头角度、色调、光影、画面质感），确保衔接流畅，时长精准，强化画面感染力。特别注意分镜头之间的视觉逻辑连贯性（如角色手中的物品、衣着状态等在前后分镜中应保持一致，不凭空消失）。
-3. **配音文案优化**：口语化、简洁有力，标注语气、语速、重音，确保与画面精准适配。且每段配音文案（不含括号内的控制词）不要超过30个字。
-4. **文案细节优化**：强化情节紧凑性，统一文案风格，补充必要动作/环境细节。
-5. **适配性优化**：确保描述不复杂、不抽象，直接可用于制作。
+2. **分镜优化**：补充视觉细节（镜头角度、色调、光影、画面质感），确保衔接流畅，时长精准，强化画面感染力。特别注意分镜头之间的视觉逻辑连贯性（如角色手中的物品、衣着状态等在前后分镜中应保持一致，不凭空消失）。分镜画面内容必须包含明确的**时间**、**地点**和**光影**描述，并且这些描述在整个剧本中必须连贯、不冲突。
+3. **音画同步（硬性要求）**：分镜画面内容必须与对应的配音内容高度一致。分镜描述的必须是配音中正在发生的事情、角色的动作或配音所描述的场景，绝不能出现“配音在讲A，分镜在画B”的割裂感。
+4. **配音文案优化**：口语化、简洁有力，标注语气、语速、重音，确保与画面精准适配。且每段配音文案（不含括号内的控制词）不要超过30个字。
+5. **文案细节优化**：强化情节紧凑性，统一文案风格，补充必要动作/环境细节。
+6. **适配性优化**：确保描述不复杂、不抽象，直接可用于制作。
 
 # 优化禁忌
 1. 不偏离原剧本的故事题材、创意主题、核心情节和视觉风格。
@@ -562,11 +571,13 @@ export const optimizeScript = async (
    - 检查并修正全剧所有角色的名称，确保每个角色只使用**唯一固定名称**，全程统一。
    - 严禁对同一角色使用不同的称呼（例如：一会儿是“外卖小哥”，一会儿是“外卖小哥王强”，一会儿是“他”，一会儿是“王强”）。必须全程使用最初定义的唯一名称。
    - 场景名称也必须保持高度一致。
+   - 道具名称也必须保持高度一致。
 3. 修补所有逻辑漏洞，让分镜衔接自然，角色行为合理、动机清晰、不突兀。**逻辑严密性（硬性要求）**：故事逻辑必须严密，情节发展应符合常理，严禁出现过于幼稚、荒诞或毫无逻辑的设定。
-4. **视觉连贯性要求**：确保分镜头之间的视觉逻辑前后一致。例如：若角色在前一分镜中持有物品（如早餐、手机等），在逻辑上该物品应继续出现的后续分镜中必须明确描述，严禁物品凭空消失。
-5. 强化故事题材氛围，节奏紧凑。
-6. **配音格式要求**：必须严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。**务必完整保留剧本中的（语气标注 / 语气提示 / 节奏提示），严禁删除括号内的任何内容。**
-7. 配音文案更口语、更有画面感、情绪递进自然，不重复、不啰嗦。且每段配音文案（不含括号内的控制词）不要超过30个字。**如果原剧本中有明确的语气标注（如：(惊讶地)、(低声地)等），必须在优化后的配音中予以保留或根据语境合理强化。**
+4. **画面连贯性（硬性要求）**：分镜画面内容必须包含明确的**时间**、**地点**和**光影**描述，并且这些描述在整个剧本中必须连贯、不冲突。例如，如果前一个镜头是“深夜的街道”，下一个紧接着的镜头不能突然变成“阳光明媚的室内”，除非有明确的时间跨度说明。这对于保证生成的画面风格统一至关重要。
+5. **音画同步（硬性要求）**：分镜画面内容必须与对应的配音内容高度一致。分镜描述的必须是配音中正在发生的事情、角色的动作或配音所描述的场景，绝不能出现“配音在讲A，分镜在画B”的割裂感。
+6. 强化故事题材氛围，节奏紧凑。
+7. **配音格式要求**：必须严格按照“配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容”这种格式书写。**务必完整保留剧本中的（语气标注 / 语气提示 / 节奏提示），严禁删除括号内的任何内容。**
+8. 配音文案更口语、更有画面感、情绪递进自然，不重复、不啰嗦。且每段配音文案（不含括号内的控制词）不要超过30个字。**如果原剧本中有明确的语气标注（如：(惊讶地)、(低声地)等），必须在优化后的配音中予以保留或根据语境合理强化。**
 
 待优化剧本：
 ${script}
@@ -617,10 +628,13 @@ export const generateAllEpisodes = async (topic: string, stylePrompt: string, st
    - 全剧所有角色必须使用**唯一固定名称**，全程统一，绝不更改。
    - 严禁对同一角色使用不同的称呼（例如：一会儿是“外卖小哥”，一会儿是“外卖小哥王强”，一会儿是“他”，一会儿是“王强”）。必须全程使用最初定义的唯一名称。
    - 场景名称也必须保持高度一致。例如：如果场景是“卧室”，则不能称呼为“卧房”。
+   - 道具名称也必须保持高度一致。
    - 这些名称将直接作为绘图提示词，任何微小的名称差异都会导致 AI 生成的形象不统一。
 2. **逻辑严密性（硬性要求）**：故事逻辑必须严密，情节发展应符合常理，严禁出现过于幼稚、荒诞或毫无逻辑的设定。
-3. **故事分布**：请将整个故事合理地分布在 ${episodeCount} 集中。严禁在第 1 集就讲完整个故事。每一集都应该是故事的一个阶段，确保剧情的连贯性和悬念。
-4. **题材契合度**：严格遵循题材描述中的核心要求和风格导向。
+3. **画面连贯性（硬性要求）**：分镜画面内容必须包含明确的**时间**、**地点**和**光影**描述，并且这些描述在整个剧本中必须连贯、不冲突。例如，如果前一个镜头是“深夜的街道”，下一个紧接着的镜头不能突然变成“阳光明媚的室内”，除非有明确的时间跨度说明。这对于保证生成的画面风格统一至关重要。
+4. **音画同步（硬性要求）**：分镜画面内容必须与对应的配音内容高度一致。分镜描述的必须是配音中正在发生的事情、角色的动作或配音所描述的场景，绝不能出现“配音在讲A，分镜在画B”的割裂感。
+5. **故事分布**：请将整个故事合理地分布在 ${episodeCount} 集中。严禁在第 1 集就讲完整个故事。每一集都应该是故事的一个阶段，确保剧情的连贯性和悬念。
+6. **题材契合度**：严格遵循题材描述中的核心要求和风格导向。
 
 # 核心参数
 1. 故事题材：${templateName}
@@ -642,7 +656,7 @@ export const generateAllEpisodes = async (topic: string, stylePrompt: string, st
   "episodes": [
     {
       "title": "第1集标题",
-      "content": "故事题材：[题材]\\n视觉风格：${styleName}（核心视觉特征）\\n剧本名称：[名称]\\n剧本集数：第 1 集\\n单集时长：${duration}\\n画面比例：${aspectRatio}\\n--- 分镜&配音：\\n分镜 1：镜头与视角 + 构图 + 光影 + 色彩 + 主体环境 + 质感 + 氛围+核心视觉特征\\n配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容\\n分镜 2：镜头与视角 + 构图 + 光影 + 色彩 + 主体环境 + 质感 + 氛围+核心视觉特征\\n配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容\\n..."
+      "content": "故事题材：[题材]\\n视觉风格：${styleName}（核心视觉特征）\\n剧本名称：[名称]\\n剧本集数：第 1 集\\n单集时长：${duration}\\n画面比例：${aspectRatio}\\n--- 分镜&配音：\\n分镜 1：[时间] + [地点] + [光影] + 镜头与视角 + 构图 + 色彩 + 主体环境 + 质感 + 氛围 + 核心视觉特征\\n配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容\\n分镜 2：[时间] + [地点] + [光影] + 镜头与视角 + 构图 + 色彩 + 主体环境 + 质感 + 氛围 + 核心视觉特征\\n配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容\\n..."
     },
     ...
   ]
@@ -684,9 +698,12 @@ export const generateScriptByScenes = async (topic: string, stylePrompt: string,
    - 全剧所有角色必须使用**唯一固定名称**，全程统一，绝不更改。
    - 严禁对同一角色使用不同的称呼（例如：一会儿是“外卖小哥”，一会儿是“外卖小哥王强”，一会儿是“他”，一会儿是“王强”）。必须全程使用最初定义的唯一名称。
    - 场景名称也必须保持高度一致。例如：如果场景是“卧室”，则不能称呼为“卧房”。
+   - 道具名称也必须保持高度一致。
    - 这些名称将直接作为绘图提示词，任何微小的名称差异都会导致 AI 生成的形象不统一。
 2. **逻辑严密性（硬性要求）**：故事逻辑必须严密，情节发展应符合常理，严禁出现过于幼稚、荒诞或毫无逻辑的设定。
-3. **题材契合度**：严格遵循题材描述中的核心要求和风格导向。
+3. **画面连贯性（硬性要求）**：分镜画面内容必须包含明确的**时间**、**地点**和**光影**描述，并且这些描述在整个剧本中必须连贯、不冲突。例如，如果前一个镜头是“深夜的街道”，下一个紧接着的镜头不能突然变成“阳光明媚的室内”，除非有明确的时间跨度说明。这对于保证生成的画面风格统一至关重要。
+4. **音画同步（硬性要求）**：分镜画面内容必须与对应的配音内容高度一致。分镜描述的必须是配音中正在发生的事情、角色的动作或配音所描述的场景，绝不能出现“配音在讲A，分镜在画B”的割裂感。
+5. **题材契合度**：严格遵循题材描述中的核心要求和风格导向。
 
 # 核心参数
 1. 故事题材：${templateName}
@@ -712,9 +729,9 @@ export const generateScriptByScenes = async (topic: string, stylePrompt: string,
 单集时长：${duration}
 画面比例：${aspectRatio}
 --- 分镜&配音：
-分镜 1：镜头与视角 + 构图 + 光影 + 色彩 + 主体环境 + 质感 + 氛围+核心视觉特征
+分镜 1：[时间] + [地点] + [光影] + 镜头与视角 + 构图 + 色彩 + 主体环境 + 质感 + 氛围 + 核心视觉特征
 配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容
-分镜 2：镜头与视角 + 构图 + 光影 + 色彩 + 主体环境 + 质感 + 氛围+核心视觉特征
+分镜 2：[时间] + [地点] + [光影] + 镜头与视角 + 构图 + 色彩 + 主体环境 + 质感 + 氛围 + 核心视觉特征
 配音：（音色 + 情绪 + 语速 + 风格）第三人称讲解的剧本内容
 ...
 `;
@@ -827,7 +844,7 @@ export const generateScript = async (finalScriptText: string, styleModifier: str
 
 export const generateAssetImage = async (
     name: string,
-    type: 'character' | 'scene',
+    type: 'character' | 'scene' | 'prop',
     styleModifier: string,
     aspectRatio: '9:16' | '16:9' = '16:9',
     description?: string, // Derived from script
@@ -860,7 +877,7 @@ export const generateAssetImage = async (
             NO TEXT, NO SUBTITLES, NO CAPTIONS, NO WATERMARKS, NO LETTERS on the image.
             Purpose: Storyboard setting. High Definition. Consistent details.
             `;
-        } else {
+        } else if (type === 'scene') {
             // Match user's requested format: Location + Core visual features
             const cleanStyle = styleModifier.replace(/核心视觉特征[：:]\s*/g, '');
             specificPrompt = `
@@ -872,6 +889,16 @@ export const generateAssetImage = async (
             ${referenceImages && referenceImages.length > 0 ? `CRITICAL: This is a specific element or area from the provided reference images. 
             - If the reference image is a larger scene (e.g., a "Bedroom") and you are generating a sub-element (e.g., a "Bedside table"), you MUST find that exact element within the reference image and replicate its appearance (style, color, material, design) perfectly.
             - Ensure the visual style, colors, and details are EXACTLY consistent with how "${name}" appears in the reference images.` : ""}
+            `;
+        } else if (type === 'prop') {
+            const cleanStyle = styleModifier.replace(/核心视觉特征[：:]\s*/g, '');
+            specificPrompt = `
+            Task: Prop Concept Art.
+            Prompt: ${name}，${cleanStyle}。
+            ${descText}
+            CRITICAL: The background must be 100% pure white, no shadows, no floor, no environment.
+            NO TEXT, NO SUBTITLES, NO CAPTIONS, NO WATERMARKS, NO LETTERS on the image.
+            Purpose: Storyboard setting. High Definition. Consistent details.
             `;
         }
 
@@ -897,7 +924,8 @@ export const generateSceneImage = async (
   sceneReferenceImages?: Array<{ data: string; mimeType: string } | undefined>,
   model: string = 'gemini-3.1-flash-image-preview',
   styleModifier: string = '',
-  previousSceneContext?: string
+  previousSceneContext?: string,
+  narrationText?: string
 ): Promise<string> => {
     const parts: any[] = [];
     // Constructed prompt handling Chinese visualPrompt gracefully
@@ -906,6 +934,7 @@ export const generateSceneImage = async (
     Shot Type & Camera Angle: "${cameraPrompt}". 
     Aspect Ratio: ${aspectRatio}.
     Style & Aesthetic: ${styleModifier || 'Cinematic, high quality'}.
+    ${narrationText ? `Voiceover/Narration Context: "${narrationText}"` : ''}
     
     CRITICAL RULES:
     - Generate ONLY ONE single image frame. 
@@ -914,6 +943,7 @@ export const generateSceneImage = async (
     - NO text, captions, or watermarks.
     - Focus on the STARTING state of the scene.
     - Use the provided reference images for character and location consistency.
+    ${narrationText ? `- **Narrative Alignment**: Ensure the generated image perfectly illustrates the action, emotion, and subject matter described in the Voiceover/Narration Context. The visual MUST match the story being told.` : ''}
     - **Spatial Integration**: Ensure characters are naturally integrated into the environment. They should interact with the lighting, shadows, and physical elements of the scene.
     - **Perspective Consistency**: The perspective and vanishing points of the characters MUST match the perspective of the background scene perfectly.
     - **Realistic Proportions**: Maintain accurate real-world scale and proportions between characters and their surroundings. No distorted or impossible sizes.

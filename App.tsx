@@ -11,7 +11,7 @@ import ScriptEditor from './components/ScriptEditor';
 import LoadingOverlay from './components/LoadingOverlay';
 import VideoPreview from './components/VideoPreview';
 import PricingModal from './components/PricingModal';
-import { Sparkles, AlertCircle, Upload, User, Trash2, Plus, Settings, Check, XCircle, Wifi, Clapperboard, BookOpen, Camera, ArrowRight, RefreshCw, MapPin, Wand2, Clock, Maximize2, Download, Monitor, ChevronRight, ChevronDown, PenTool, ShoppingBag, Brain, MessageCircleQuestion, BadgeDollarSign, History, ExternalLink, AlertTriangle, FileText, Database, DollarSign, Loader2, Image, Zap, Link2, Film, Bot, X, Eye, EyeOff, Save, Copy, Music } from 'lucide-react';
+import { Sparkles, AlertCircle, Upload, User, Trash2, Plus, Settings, Check, XCircle, Wifi, Clapperboard, BookOpen, Camera, ArrowRight, RefreshCw, MapPin, Wand2, Clock, Maximize2, Download, Monitor, ChevronRight, ChevronDown, PenTool, ShoppingBag, Brain, MessageCircleQuestion, BadgeDollarSign, History, ExternalLink, AlertTriangle, FileText, Database, DollarSign, Loader2, Image, Zap, Link2, Film, Bot, X, Eye, EyeOff, Save, Copy, Music, Box } from 'lucide-react';
 import { clsx } from 'clsx';
 import { proxyConfig as agentConfig } from './src/proxyConfig';
 
@@ -40,7 +40,7 @@ async function runConcurrent<T>(
 
 // --- Asset Slot Component (Comic Style) ---
 interface AssetSlotProps {
-  type: 'character' | 'scene';
+  type: 'character' | 'scene' | 'prop';
   asset: AssetItem;
   onUpload: (file: File) => void;
   onRemove: () => void;
@@ -157,6 +157,7 @@ const AssetSlot: React.FC<AssetSlotProps> = ({
             title={asset.name || (type === 'character' ? "UNNAMED" : "UNNAMED")}
           >
             {asset.name || (type === 'character' ? "UNNAMED" : "UNNAMED")}
+            {asset.occurrences !== undefined && <span className="text-sm text-gray-500 ml-1 font-sans">(出现{asset.occurrences}次)</span>}
           </span>
           <label className="flex items-center gap-1.5 text-xs font-normal cursor-pointer select-none hover:text-black text-gray-600 group/chk shrink-0">
               <div className={clsx("w-4 h-4 border-2 border-black flex items-center justify-center transition-colors", asset.autoReference !== false ? "bg-[#10B981]" : "bg-white")}>
@@ -339,6 +340,7 @@ function App() {
   // Dynamic Assets State
   const [characters, setCharacters] = useState<AssetItem[]>([]);
   const [coreScenes, setCoreScenes] = useState<AssetItem[]>([]);
+  const [propsList, setPropsList] = useState<AssetItem[]>([]);
   
   // Generating IDs (Using Set for multiple simultaneous generations)
   const [generatingAssetIds, setGeneratingAssetIds] = useState<Set<string>>(new Set());
@@ -492,10 +494,11 @@ function App() {
   };
 
   // --- Asset Management Logic ---
-  const addAssetSlot = (type: 'character' | 'scene', name: string = '') => {
+  const addAssetSlot = (type: 'character' | 'scene' | 'prop', name: string = '') => {
       const newItem: AssetItem = { id: Date.now().toString() + Math.random(), type, name, data: '', mimeType: '', previewUrl: '', autoReference: true };
       if (type === 'character') setCharacters([...characters, newItem]);
       if (type === 'scene') setCoreScenes([...coreScenes, newItem]);
+      if (type === 'prop') setPropsList([...propsList, newItem]);
   };
 
   // Safe update using functional state to prevent stale closures
@@ -570,10 +573,10 @@ function App() {
       setList: React.Dispatch<React.SetStateAction<AssetItem[]>>,
       categoryName: string
   ) => {
-      const targets = list.filter(item => !item.data);
+      const targets = list.filter(item => !item.data && (item.occurrences === undefined || item.occurrences >= 2));
 
       if (targets.length === 0) {
-          alert(`所有${categoryName}已有图片。`);
+          alert(`所有符合条件（出现次数≥2）的${categoryName}已有图片，或没有需要生成的元素。`);
           return;
       }
 
@@ -899,8 +902,10 @@ function App() {
                   const sceneLocations = coreScenes.filter(s => isAssetInScene(s.name, scene, false));
                   
                   const previousSceneContext = i > 0 ? (scenesWithDuration[i-1].visualPrompt || scenesWithDuration[i-1].script) : undefined;
+                  const episodeNarration = episodesNarration[episodeNum] || '';
+                  const sceneNarration = episodeNarration.split('\n')[i] || '';
 
-                  const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt || '', sceneCharacters, sceneLocations.length > 0 ? sceneLocations : coreScenes, aspectRatio, scene.sceneReferenceImages || [], assetModel, getFullStyleModifier(), previousSceneContext);
+                  const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt || '', sceneCharacters, sceneLocations.length > 0 ? sceneLocations : coreScenes, aspectRatio, scene.sceneReferenceImages || [], assetModel, getFullStyleModifier(), previousSceneContext, sceneNarration);
                   
                   if (loadingSession.current !== sessionId) return;
 
@@ -955,25 +960,37 @@ function App() {
           setGlobalNarration(extractedNarration);
           
           // Extract assets from all episodes
-          const allScripts = Object.values({ ...episodesScript, [currentEpisode]: finalScriptText }).join('\n\n---\n\n');
-          const extraction = await extractAssetsFromScript(allScripts);
+          const allScenesScripts = generatedScenes.map(s => s.script).join('\n\n');
+          const extraction = await extractAssetsFromScript(allScenesScripts);
           
           if (loadingSession.current !== sessionId) return;
+
+          const countOccurrences = (text: string, word: string) => {
+              if (!word) return 0;
+              // Escape special characters in word for regex
+              const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const regex = new RegExp(escapedWord, 'gi');
+              return (text.match(regex) || []).length;
+          };
 
           const newCharacters = extraction.characters
               .filter(item => {
                   const n = item.name.toLowerCase();
                   return n !== '旁白' && !n.includes('声音') && !n.includes('旁白') && !n.includes('音效') && !n.includes('配音');
               })
-              .map((item, i) => ({ id: `c-ext-${Date.now()}-${i}`, type: 'character' as const, name: item.name, description: item.description, data: '', mimeType: '', previewUrl: '', autoReference: true }));
-          const newCoreScenes = extraction.scenes.map((item, i) => ({ id: `s-ext-${Date.now()}-${i}`, type: 'scene' as const, name: item.name, description: item.description, data: '', mimeType: '', previewUrl: '', autoReference: true }));
+              .map((item, i) => ({ id: `c-ext-${Date.now()}-${i}`, type: 'character' as const, name: item.name, description: item.description, data: '', mimeType: '', previewUrl: '', autoReference: true, occurrences: countOccurrences(allScenesScripts, item.name) }));
+          const newCoreScenes = extraction.scenes.map((item, i) => ({ id: `s-ext-${Date.now()}-${i}`, type: 'scene' as const, name: item.name, description: item.description, data: '', mimeType: '', previewUrl: '', autoReference: true, occurrences: countOccurrences(allScenesScripts, item.name) }));
+          const newProps = (extraction.props || []).map((item, i) => ({ id: `p-ext-${Date.now()}-${i}`, type: 'prop' as const, name: item.name, description: item.description, data: '', mimeType: '', previewUrl: '', autoReference: true, occurrences: countOccurrences(allScenesScripts, item.name) }));
 
           // Merge characters
           setCharacters(prev => {
               const merged = [...prev];
               newCharacters.forEach(nc => {
-                  if (!merged.some(ec => ec.name.toLowerCase() === nc.name.toLowerCase())) {
+                  const existingIndex = merged.findIndex(ec => ec.name.toLowerCase() === nc.name.toLowerCase());
+                  if (existingIndex === -1) {
                       merged.push(nc);
+                  } else {
+                      merged[existingIndex].occurrences = nc.occurrences;
                   }
               });
               return merged;
@@ -983,8 +1000,25 @@ function App() {
           setCoreScenes(prev => {
               const merged = [...prev];
               newCoreScenes.forEach(ns => {
-                  if (!merged.some(es => es.name.toLowerCase() === ns.name.toLowerCase())) {
+                  const existingIndex = merged.findIndex(es => es.name.toLowerCase() === ns.name.toLowerCase());
+                  if (existingIndex === -1) {
                       merged.push(ns);
+                  } else {
+                      merged[existingIndex].occurrences = ns.occurrences;
+                  }
+              });
+              return merged;
+          });
+
+          // Merge props
+          setPropsList(prev => {
+              const merged = [...prev];
+              newProps.forEach(np => {
+                  const existingIndex = merged.findIndex(ep => ep.name.toLowerCase() === np.name.toLowerCase());
+                  if (existingIndex === -1) {
+                      merged.push(np);
+                  } else {
+                      merged[existingIndex].occurrences = np.occurrences;
                   }
               });
               return merged;
@@ -994,6 +1028,7 @@ function App() {
           
           if (extraction.characters.length === 0) addAssetSlot('character');
           if (extraction.scenes.length === 0) addAssetSlot('scene');
+          if ((extraction.props || []).length === 0) addAssetSlot('prop');
 
           // Initialize scenes with selected video duration
           const scenesWithDuration = generatedScenes.map(s => ({ ...s, videoDuration: videoDuration as 8 | 10 | 15 }));
@@ -1037,8 +1072,9 @@ function App() {
                 const sceneLocations = coreScenes.filter(s => isAssetInScene(s.name, scene, false));
                 
                 const previousSceneContext = i > 0 ? (scenes[i-1].visualPrompt || scenes[i-1].script) : undefined;
+                const sceneNarration = globalNarration ? globalNarration.split('\n')[i] || '' : '';
 
-                const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt || '', sceneCharacters, sceneLocations.length > 0 ? sceneLocations : coreScenes, aspectRatio, scene.sceneReferenceImages || [], assetModel, getFullStyleModifier(), previousSceneContext);
+                const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt || '', sceneCharacters, sceneLocations.length > 0 ? sceneLocations : coreScenes, aspectRatio, scene.sceneReferenceImages || [], assetModel, getFullStyleModifier(), previousSceneContext, sceneNarration);
                 
                 if (loadingSession.current !== sessionId) return;
 
@@ -1093,8 +1129,9 @@ function App() {
           const sceneLocations = coreScenes.filter(s => isAssetInScene(s.name, scene, false));
 
           const previousSceneContext = index > 0 ? (scenes[index-1].visualPrompt || scenes[index-1].script) : undefined;
+          const sceneNarration = globalNarration ? globalNarration.split('\n')[index] || '' : '';
 
-          const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt, sceneCharacters, sceneLocations.length > 0 ? sceneLocations : coreScenes, aspectRatio, refScenesRaw, assetModel, getFullStyleModifier(), previousSceneContext);
+          const b64 = await generateSceneImage(promptToUse, scene.cameraPrompt, sceneCharacters, sceneLocations.length > 0 ? sceneLocations : coreScenes, aspectRatio, refScenesRaw, assetModel, getFullStyleModifier(), previousSceneContext, sceneNarration);
           setScenes(prev => {
               const next = [...prev];
               next[index] = { ...next[index], imageUrl: b64, imageHistory: [...(next[index].imageHistory || []), b64], isGeneratingImage: false };
@@ -1284,7 +1321,7 @@ function App() {
     setLoading(false);
   };
 
-  const allAssets = { characters, coreScenes };
+  const allAssets = { characters, coreScenes, propsList };
 
   const renderAssetSlotWrapper = (item: AssetItem, list: AssetItem[], setList: React.Dispatch<React.SetStateAction<AssetItem[]>>, index: number) => (
       <AssetSlot 
@@ -2136,6 +2173,32 @@ function App() {
                          ))}
                      </div>
                  </div>
+
+                 {/* Props Section */}
+                 <div className="bg-[#1a1a1a] px-0 pt-8 border-t-4 border-dashed border-gray-700">
+                     <div className="flex items-center justify-between mb-6">
+                         <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-[#10B981] text-white flex items-center justify-center border-2 border-black">
+                                <Box size={28} />
+                            </div>
+                            <h3 className="text-4xl font-bangers text-white uppercase tracking-wide">PROPS（道具）</h3>
+                         </div>
+                         <div className="flex gap-4">
+                            <button 
+                                onClick={() => handleBatchGenerateAssets(propsList, setPropsList, 'Props')}
+                                className="flex items-center gap-2 bg-[#FACC15] hover:bg-[#EAB308] border border-black px-4 py-1.5 uppercase text-lg"
+                            >
+                                <Sparkles size={16} /> AI一键生成
+                            </button>
+                         </div>
+                     </div>
+                     {/* Asset Grid Layout for Props */}
+                     <div className={assetGridClass}>
+                         {propsList.map((c, i) => (
+                             <React.Fragment key={c.id}>{renderAssetSlotWrapper(c, propsList, setPropsList, i)}</React.Fragment>
+                         ))}
+                     </div>
+                 </div>
             </div>
         )}
 
@@ -2144,8 +2207,25 @@ function App() {
                 scenes={scenes}
                 assets={allAssets}
                 onRegenerateImage={handleRegenerateImage}
-                onUpdatePrompt={(i, v, l) => { const s = [...scenes]; s[i].visualPrompt = v; setScenes(s); }}
-                onUpdateScript={(i, v) => { const s = [...scenes]; s[i].script = v; setScenes(s); }}
+                onUpdatePrompt={(i, v, l) => { 
+                    const s = [...scenes]; 
+                    s[i].visualPrompt = v; 
+                    setScenes(s); 
+                    
+                    // Update raw script text
+                    setEpisodesScript(prev => {
+                        const script = prev[currentEpisode];
+                        if (!script) return prev;
+                        const promptRegex = new RegExp(`(分镜\\s*${i + 1}\\s*[：:]\\s*)(.*?)(?=\\n|$)`);
+                        const newScript = script.replace(promptRegex, `$1${v}`);
+                        return { ...prev, [currentEpisode]: newScript };
+                    });
+                }}
+                onUpdateScript={(i, v) => { 
+                    const s = [...scenes]; 
+                    s[i].script = v; 
+                    setScenes(s); 
+                }}
                 onSelectSceneImage={(i, h) => { const s=[...scenes]; if(s[i].imageHistory?.[h]) s[i].imageUrl=s[i].imageHistory[h]; setScenes(s); }}
                 onManualUpload={handleManualSceneImageUpload}
                 onDeleteImage={handleDeleteSceneImage}
@@ -2167,6 +2247,22 @@ function App() {
                 globalAudioUrl={globalAudioUrl}
                 isGeneratingGlobalAudio={isGeneratingGlobalAudio}
                 onUpdateGlobalNarration={setGlobalNarration}
+                onUpdateNarration={(i, v) => {
+                    if (!globalNarration) return;
+                    const lines = globalNarration.split('\n');
+                    lines[i] = v;
+                    setGlobalNarration(lines.join('\n'));
+                    
+                    // Update raw script text
+                    setEpisodesScript(prev => {
+                        const script = prev[currentEpisode];
+                        if (!script) return prev;
+                        // Find "分镜 X" and then replace the next "配音：" line
+                        const regex = new RegExp(`(分镜\\s*${i + 1}\\s*[：:][\\s\\S]*?配音\\s*[：:]\\s*)(.*?)(?=\\n|$)`);
+                        const newScript = script.replace(regex, `$1${v}`);
+                        return { ...prev, [currentEpisode]: newScript };
+                    });
+                }}
                 onGenerateGlobalAudio={handleGenerateGlobalAudio}
                 currentEpisode={currentEpisode}
                 totalEpisodes={totalEpisodes}

@@ -2,13 +2,14 @@
 
 export interface AssetItem {
   id: string;
-  type: 'character' | 'scene';
+  type: 'character' | 'scene' | 'prop';
   name: string;
   description?: string; // Visual description extracted from script
   data: string; // base64
   mimeType: string;
   previewUrl: string;
   autoReference?: boolean;
+  occurrences?: number;
 }
 
 export type VideoModel = 'veo_3_1-fast' | 'veo_3_1-fast-4K' | 'veo_3_1' | 'veo_3_1-4K' | 'veo3.1-fast' | 'veo3.1' | 'grok-video-3-10s' | 'grok-video-3-15s' | 'sora-2-all';
