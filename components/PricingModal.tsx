@@ -54,8 +54,8 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose }) => {
             <div className="grid grid-cols-1 gap-2">
               {[
                 { name: 'Gemini-2.5-Flash-Image', price: `${p(0.063)}/张` },
-                { name: 'Gemini-3-Pro-Image', price: `1K/2K ${p(0.139)}/张，4K ${p(0.248)}/张` },
-                { name: 'Gemini-3.1-Flash-Image', price: `1K/2K ${p(0.070)}/张，4K ${p(0.087)}/张` },
+                { name: 'Gemini-3-Pro-Image', price: `1K/2K ${p(0.231)}/张，4K ${p(0.414)}/张` },
+                { name: 'Gemini-3.1-Flash-Image', price: `1K/2K ${p(0.116)}/张，4K ${p(0.207)}/张` },
               ].map(m => (
                 <div key={m.name} className="grid grid-cols-2 bg-white p-2 border-2 border-black rounded-lg items-center">
                   <span className="font-black text-md">{m.name}</span>
