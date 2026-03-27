@@ -11,7 +11,7 @@ import ScriptEditor from './components/ScriptEditor';
 import LoadingOverlay from './components/LoadingOverlay';
 import VideoPreview from './components/VideoPreview';
 import PricingModal from './components/PricingModal';
-import { Sparkles, AlertCircle, Upload, User, Trash2, Plus, Settings, Check, XCircle, Wifi, Clapperboard, BookOpen, Camera, ArrowRight, RefreshCw, MapPin, Wand2, Clock, Maximize2, Download, Monitor, ChevronRight, ChevronDown, PenTool, ShoppingBag, Brain, MessageCircleQuestion, BadgeDollarSign, History, ExternalLink, AlertTriangle, FileText, Database, DollarSign, Loader2, Image, Zap, Link2, Film, Bot, X, Eye, EyeOff, Save, Copy, Music, Box } from 'lucide-react';
+import { Sparkles, AlertCircle, Upload, User, Trash2, Plus, Settings, Check, XCircle, Wifi, Clapperboard, BookOpen, Camera, ArrowRight, RefreshCw, MapPin, Wand2, Clock, Maximize2, Download, Monitor, ChevronRight, ChevronDown, PenTool, ShoppingBag, Brain, MessageCircleQuestion, BadgeDollarSign, History, ExternalLink, AlertTriangle, FileText, Database, DollarSign, Loader2, Image, Zap, Link2, Film, Bot, X, Eye, EyeOff, Save, Copy, Music, Box, Heart, Users, Globe } from 'lucide-react';
 import { clsx } from 'clsx';
 import { proxyConfig as agentConfig } from './src/proxyConfig';
 
@@ -332,6 +332,7 @@ function App() {
   
   // Support Modal State
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const [showFriendshipModal, setShowFriendshipModal] = useState(false);
 
 
   // Pricing Modal State
@@ -1442,6 +1443,14 @@ function App() {
               >
                   <History size={40} strokeWidth={2} />
               </button>
+
+              <button 
+                  onClick={() => setShowFriendshipModal(true)}
+                  className="text-black hover:text-red-600 transition-colors"
+                  title="友情链接"
+              >
+                  <Globe size={40} strokeWidth={2} />
+              </button>
           </div>
         </div>
       </header>
@@ -1548,6 +1557,80 @@ function App() {
                           >
                               查看更多详情 <ExternalLink size={20} />
                           </a>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Friendship Links Modal */}
+      {showFriendshipModal && (
+          <div className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4">
+              <div className="bg-white border-4 border-black w-full max-w-2xl relative animate-in zoom-in duration-200">
+                  <div className="bg-[#FACC15] border-b-4 border-black p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                          <Globe className="w-8 h-8 text-black" strokeWidth={2.5} />
+                          <h2 className="text-3xl font-black text-black tracking-wide font-sans uppercase">友情链接 / FRIENDS</h2>
+                      </div>
+                      <button 
+                          onClick={() => setShowFriendshipModal(false)} 
+                          className="bg-[#EF4444] hover:bg-[#DC2626] border-2 border-black text-white p-1 transition-colors"
+                      >
+                          <X size={24} strokeWidth={3} />
+                      </button>
+                  </div>
+                  
+                  <div className="p-8 bg-[#FFFBEB]">
+                      <div className="flex flex-col space-y-6">
+                          {/* Link 1 */}
+                          <div className="space-y-3">
+                              <h3 className="text-xl font-black text-black tracking-wider font-sans flex items-center gap-2">
+                                  <Sparkles className="w-5 h-5 text-[#8B5CF6]" />
+                                  AI生图/生视频
+                              </h3>
+                              <a 
+                                  href="https://p.vivaapi.cn" 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="w-full bg-white border-2 border-black p-4 hover:bg-gray-50 transition-colors group flex items-center justify-between rounded-lg"
+                              >
+                                  <div className="flex flex-col">
+                                      <span className="text-2xl font-black text-black group-hover:text-red-600 transition-colors">p.vivaapi.cn</span>
+                                      <span className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Professional AI Generation Service</span>
+                                  </div>
+                                  <div className="bg-black text-white p-2 group-hover:bg-red-600 transition-colors">
+                                      <ExternalLink size={24} strokeWidth={2.5} />
+                                  </div>
+                              </a>
+                          </div>
+
+                          {/* Link 2 */}
+                          <div className="space-y-3">
+                              <h3 className="text-xl font-black text-black tracking-wider font-sans flex items-center gap-2">
+                                  <Zap className="w-5 h-5 text-[#FACC15]" />
+                                  AI大模型API接入
+                              </h3>
+                              <a 
+                                  href="https://www.vivaapi.cn" 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="w-full bg-white border-2 border-black p-4 hover:bg-gray-50 transition-colors group flex items-center justify-between rounded-lg"
+                              >
+                                  <div className="flex flex-col">
+                                      <span className="text-2xl font-black text-black group-hover:text-red-600 transition-colors">www.vivaapi.cn</span>
+                                      <span className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Enterprise AI API Gateway</span>
+                                  </div>
+                                  <div className="bg-black text-white p-2 group-hover:bg-red-600 transition-colors">
+                                      <ExternalLink size={24} strokeWidth={2.5} />
+                                  </div>
+                              </a>
+                          </div>
+
+                          <div className="w-full border-t-2 border-dashed border-gray-300 pt-6 text-center">
+                              <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">
+                                  Powered by Viva API Ecosystem
+                              </p>
+                          </div>
                       </div>
                   </div>
               </div>
