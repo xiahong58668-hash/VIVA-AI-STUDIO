@@ -173,7 +173,7 @@ const cleanJson = (text: string): string => {
 };
 
 const TEXT_MODELS = [
-    'gemini-3-pro-preview',
+    'gemini-3.1-pro-preview',
     'gemini-3-flash-preview',
     'gemini-3.1-flash-lite-preview',
     'gpt-5.2',
@@ -603,7 +603,7 @@ ${script}
                 return await executeCall(model);
             } catch (e) {
                 console.warn(`Default text model ${model} failed for optimization, trying fallback...`, e);
-                const otherModels = ['gemini-3.1-flash-lite-preview', 'gemini-3-flash-preview', 'gemini-3-pro-preview'].filter(m => m !== model);
+                const otherModels = ['gemini-3.1-flash-lite-preview', 'gemini-3-flash-preview', 'gemini-3.1-pro-preview'].filter(m => m !== model);
                 for (const fallbackModel of otherModels) {
                     try {
                         return await executeCall(fallbackModel);

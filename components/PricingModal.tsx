@@ -32,7 +32,7 @@ const PricingModal: React.FC<PricingModalProps> = ({ onClose }) => {
             <h3 className="text-xl font-black mb-3 border-b-4 border-black pb-1 inline-block">文本模型</h3>
             <div className="grid grid-cols-1 gap-2">
               {[
-                { name: 'Gemini-3-Pro', input: p(1.120), output: p(6.720) },
+                { name: 'Gemini-3.1-Pro', input: p(1.120), output: p(6.720) },
                 { name: 'Gemini-3-Flash', input: p(0.280), output: p(1.680) },
                 { name: 'Gemini-3.1-Flash', input: p(0.263), output: p(1.575) },
                 { name: 'GPT-5.2', input: p(0.735), output: p(5.880) },

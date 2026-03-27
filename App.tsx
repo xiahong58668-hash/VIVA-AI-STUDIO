@@ -1865,7 +1865,7 @@ function App() {
                         <p className="text-gray-600 text-sm mb-2">用于生成剧本、分镜描述和提示词。</p>
                         <div className="relative">
                             <select value={textModel} onChange={(e) => setTextModel(e.target.value)} className="w-full bg-gray-50 border-2 border-black p-4 font-bold text-lg rounded-xl appearance-none cursor-pointer hover:bg-gray-100 focus:outline-none focus:ring-4 focus:ring-[#FACC15]">
-                                <option value="gemini-3-pro-preview">Gemini-3-Pro</option>
+                                <option value="gemini-3.1-pro-preview">Gemini-3.1-Pro</option>
                                 <option value="gemini-3-flash-preview">Gemini-3-Flash</option>
                                 <option value="gemini-3.1-flash-lite-preview">Gemini-3.1-Flash</option>
                                 <option value="gpt-5.2">GPT-5.2</option>
