@@ -17,9 +17,10 @@ interface Props {
   totalEpisodes: number;
   onEpisodeChange: (episode: number) => void;
   textModel: string;
+  onOptimizeAll?: (currentScript: string) => void;
 }
 
-const ScriptEditor: React.FC<Props> = ({ initialScript, onFinalize, isGenerating, onNext, canGoNext, onRegenerate, onPolishScript, currentEpisode, totalEpisodes, onEpisodeChange, textModel }) => {
+const ScriptEditor: React.FC<Props> = ({ initialScript, onFinalize, isGenerating, onNext, canGoNext, onRegenerate, onPolishScript, currentEpisode, totalEpisodes, onEpisodeChange, textModel, onOptimizeAll }) => {
   const [script, setScript] = useState(initialScript);
   const [isOptimizing, setIsOptimizing] = useState(false);
 
@@ -75,6 +76,10 @@ const ScriptEditor: React.FC<Props> = ({ initialScript, onFinalize, isGenerating
   }, [initialScript]);
 
   const handleOptimize = async () => {
+    if (onOptimizeAll) {
+        onOptimizeAll(script);
+        return;
+    }
     setIsOptimizing(true);
     try {
         const optimized = await optimizeScript(script, textModel);
@@ -138,12 +143,12 @@ const ScriptEditor: React.FC<Props> = ({ initialScript, onFinalize, isGenerating
                 className="flex-1 bg-[#FACC15] hover:bg-[#EAB308] text-black py-4 font-bangers text-2xl tracking-widest uppercase border-2 border-black transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
                 title="剧本优化"
              >
-                {isOptimizing ? (
+                {isOptimizing || isGenerating ? (
                     <RefreshCw size={24} className="animate-spin" />
                 ) : (
                     <Sparkles size={24} />
                 )}
-                {isOptimizing ? '正在优化...' : '剧本优化'}
+                {isOptimizing || isGenerating ? '正在优化...' : '剧本优化'}
              </button>
 
              <button 

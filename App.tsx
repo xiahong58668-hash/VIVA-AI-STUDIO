@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { get, set, clear } from 'idb-keyval';
 import { AppStep, Scene, StyleOption, AssetItem, ScriptCategory, ScriptTemplate, ScriptOption, VideoModel } from './types';
 import { STYLES, SCRIPT_CATEGORIES, getValidDurations } from './constants';
-import { generateScript, generateSceneImage, extractAssetsFromScript, setCustomConfig, testApiConnection, generateAssetImage, generateTopicIdeas, generateScriptByScenes, generateAllEpisodes, generateVideo, editSceneImage, generateAudio, generateMissingScenePrompt } from './services/geminiService';
+import { generateScript, generateSceneImage, extractAssetsFromScript, setCustomConfig, testApiConnection, generateAssetImage, generateTopicIdeas, generateScriptByScenes, generateAllEpisodes, generateVideo, editSceneImage, generateAudio, generateMissingScenePrompt, optimizeScript } from './services/geminiService';
 import StepIndicator from './components/StepIndicator';
 import StoryboardGrid from './components/StoryboardGrid';
 import ScriptEditor from './components/ScriptEditor';
@@ -1044,6 +1044,43 @@ function App() {
       }
   };
 
+  const handleOptimizeAllScripts = async (currentScript: string) => {
+      // First, save the current script to ensure we have the latest edits
+      setEpisodesScript(prev => ({ ...prev, [currentEpisode]: currentScript }));
+      
+      const sessionId = ++loadingSession.current;
+      setLoading(true);
+      setLoadingMessage('正在优化所有集数剧本...');
+      setError(null);
+      
+      try {
+          const updatedScripts = { ...episodesScript, [currentEpisode]: currentScript };
+          const episodeNumbers = Array.from({ length: totalEpisodes }, (_, i) => i + 1);
+          
+          // Use runConcurrent to optimize all scripts concurrently (limit to 3 for rate limits)
+          const episodesToOptimize = episodeNumbers.map(ep => ({ ep, script: updatedScripts[ep] }));
+          
+          await runConcurrent(episodesToOptimize, 3, async (item) => {
+              if (loadingSession.current !== sessionId) return;
+              if (item.script) {
+                  const optimized = await optimizeScript(item.script, textModel);
+                  updatedScripts[item.ep] = optimized;
+              }
+          });
+          
+          if (loadingSession.current !== sessionId) return;
+          
+          setEpisodesScript(updatedScripts);
+          alert("所有集数剧本已优化完成！");
+      } catch (error: any) {
+          if (loadingSession.current !== sessionId) return;
+          console.error("Failed to optimize all scripts:", error);
+          setError("剧本优化失败，请稍后再试。");
+      } finally {
+          if (loadingSession.current === sessionId) setLoading(false);
+      }
+  };
+
   const handleGenerateStoryboard = async () => {
     const sessionId = ++loadingSession.current;
     // Removed setLoading(true) to skip the "AI IS WORKING" screen
@@ -1865,7 +1902,7 @@ function App() {
                         <p className="text-gray-600 text-sm mb-2">用于生成剧本、分镜描述和提示词。</p>
                         <div className="relative">
                             <select value={textModel} onChange={(e) => setTextModel(e.target.value)} className="w-full bg-gray-50 border-2 border-black p-4 font-bold text-lg rounded-xl appearance-none cursor-pointer hover:bg-gray-100 focus:outline-none focus:ring-4 focus:ring-[#FACC15]">
-                                <option value="gemini-3-pro-preview">Gemini-3-Pro</option>
+                                <option value="gemini-3.1-pro-preview">Gemini-3.1-Pro</option>
                                 <option value="gemini-3-flash-preview">Gemini-3-Flash</option>
                                 <option value="gemini-3.1-flash-lite-preview">Gemini-3.1-Flash</option>
                                 <option value="gpt-5.2">GPT-5.2</option>
@@ -2165,6 +2202,7 @@ function App() {
                totalEpisodes={totalEpisodes}
                onEpisodeChange={setCurrentEpisode}
                textModel={textModel}
+               onOptimizeAll={handleOptimizeAllScripts}
            />
         )}
 
